@@ -6,9 +6,11 @@ const { exec } = require('child_process');
 // 要复制到部署目录的文件和文件夹
 const filesToCopy = [
     'index.html',
+    'login.html',
     'css',
     'js',
     'cloudflare-config.js',
+    'auth-config.js',
     '_headers',
     '_redirects'
 ];

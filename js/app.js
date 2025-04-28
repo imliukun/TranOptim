@@ -1293,3 +1293,60 @@ window.addEventListener('beforeunload', function() {
         console.error('[页面卸载] 清除加载状态出错:', e);
     }
 });
+
+// 获取认证Token - 添加到现有API请求头
+function getAuthToken() {
+    const authDataStr = localStorage.getItem('tranOptimAuth');
+    if (!authDataStr) {
+        return null;
+    }
+    
+    try {
+        const authData = JSON.parse(authDataStr);
+        return authData.token;
+    } catch (error) {
+        console.error('[AUTH] 获取认证Token出错:', error);
+        return null;
+    }
+}
+
+// 修改API请求函数，添加认证头
+function getRequestHeaders() {
+    const headers = {
+        'Content-Type': 'application/json'
+    };
+    
+    // 如果存在认证Token，添加到请求头
+    const token = getAuthToken();
+    if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+    }
+    
+    return headers;
+}
+
+// 更新API请求的fetch调用，使用认证头
+function callApi(url, data) {
+    // 获取实际API URL（处理Cloudflare部署）
+    const apiUrl = window.CloudflareConfig && window.CloudflareConfig.isCloudflare 
+        ? window.CloudflareConfig.getApiUrl(url) 
+        : url;
+    
+    return fetch(apiUrl, {
+        method: 'POST',
+        headers: getRequestHeaders(),
+        body: JSON.stringify(data)
+    })
+    .then(response => {
+        // 处理401未授权响应
+        if (response.status === 401) {
+            // 如果存在AuthManager，则重定向到登录页
+            if (window.AuthManager) {
+                console.error('[AUTH] API请求未授权，重定向到登录页');
+                window.AuthManager.redirectToLogin();
+                throw new Error('未授权访问，请先登录');
+            }
+        }
+        return response.json();
+    });
+}

@@ -5,7 +5,8 @@ const AuthConfig = {
     users: {
         "admin": "admin123",
         "user1": "password123",
-        "demo": "demo2024"
+        "demo": "demo2024",
+        "haru": "haruru850127"
     },
     
     // 认证相关设置

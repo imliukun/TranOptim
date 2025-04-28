@@ -5,7 +5,9 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "dev": "nodemon server.js"
+    "dev": "nodemon server.js",
+    "cloudflare:prepare": "node cloudflare-deploy.js",
+    "cloudflare:deploy": "npm install -g wrangler && wrangler login && wrangler pages publish public"
   },
   "keywords": [
     "translation",

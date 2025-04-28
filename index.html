@@ -4,8 +4,15 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>TranOptim - 智能翻译与润色工具</title>
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="stylesheet" href="css/style.css">
+    <!-- 认证配置和脚本 -->
+    <script src="auth-config.js"></script>
+    <script src="js/auth.js"></script>
+    <!-- Cloudflare部署配置 -->
+    <script src="cloudflare-config.js"></script>
+    <!-- 应用脚本 -->
+    <script src="js/app.js"></script>
 </head>
 <body>
     <div class="container">
@@ -16,15 +23,26 @@
                     <h2>TranOptim</h2>
                     <div class="sidebar-actions">
                         <button class="new-chat-btn" id="newChatBtn">
-                            <i class="bi bi-plus-lg"></i> 新对话
+                            <i class="fas fa-plus"></i> 新对话
                         </button>
                         <button class="clear-chats-btn" id="clearChatsBtn">
-                            <i class="bi bi-trash"></i> 清空
+                            <i class="fas fa-trash"></i> 清空
                         </button>
                     </div>
                 </div>
                 <div class="conversation-list" id="conversationList">
                     <!-- 对话列表将通过JavaScript动态生成 -->
+                </div>
+                
+                <!-- 用户信息和退出按钮 -->
+                <div class="user-info" id="userInfo">
+                    <div class="user-avatar">
+                        <i class="fas fa-user-circle"></i>
+                    </div>
+                    <div class="user-name" id="userName"></div>
+                    <button class="logout-btn" id="logoutBtn">
+                        <i class="fas fa-sign-out-alt"></i> 退出
+                    </button>
                 </div>
             </div>
 
@@ -57,22 +75,22 @@
                             <div class="buttons-wrapper">
                                 <div class="action-buttons">
                                     <button class="btn upload-btn" id="uploadBtn">
-                                        <i class="bi bi-image"></i> 图片
+                                        <i class="fas fa-image"></i> 图片
                                     </button>
                                     <input type="file" id="imageUpload" class="image-upload" accept="image/*">
                                     <button class="btn primary-btn" id="translateBtn">
-                                        <i class="bi bi-translate"></i> 翻译
+                                        <i class="fas fa-language"></i> 翻译
                                     </button>
                                     <button class="btn secondary-btn" id="polishBtn">
-                                        <i class="bi bi-magic"></i> 润色
+                                        <i class="fas fa-magic"></i> 润色
                                     </button>
                                 </div>
                                 <div class="settings-buttons">
                                     <button class="settings-btn" id="translateSettingsBtn">
-                                        <i class="bi bi-gear"></i>
+                                        <i class="fas fa-cog"></i>
                                     </button>
                                     <button class="settings-btn" id="polishSettingsBtn">
-                                        <i class="bi bi-sliders"></i>
+                                        <i class="fas fa-sliders-h"></i>
                                     </button>
                                 </div>
                             </div>
@@ -85,7 +103,7 @@
                     <h3>
                         翻译设置
                         <button class="close-settings-btn" id="closeTranslateSettings">
-                            <i class="bi bi-x"></i>
+                            <i class="fas fa-times"></i>
                         </button>
                     </h3>
                     <div class="settings-group">
@@ -149,7 +167,7 @@
                     <h3>
                         润色设置
                         <button class="close-settings-btn" id="closePolishSettings">
-                            <i class="bi bi-x"></i>
+                            <i class="fas fa-times"></i>
                         </button>
                     </h3>
                     <div class="settings-group">
@@ -233,7 +251,33 @@
     <!-- 通知组件 -->
     <div class="notification" id="notification"></div>
 
+    <!-- 应用脚本 -->
     <script src="js/app.js"></script>
     <script src="js/chat.js"></script>
+    
+    <!-- 认证初始检查脚本 -->
+    <script>
+        // 页面加载完成后进行认证检查
+        document.addEventListener('DOMContentLoaded', function() {
+            // 执行认证检查
+            if (window.AuthManager) {
+                window.AuthManager.initAuthCheck();
+                
+                // 显示当前用户名
+                const userName = document.getElementById('userName');
+                if (userName) {
+                    userName.textContent = window.AuthManager.getCurrentUsername() || 'Guest';
+                }
+                
+                // 为退出按钮添加事件处理器
+                const logoutBtn = document.getElementById('logoutBtn');
+                if (logoutBtn) {
+                    logoutBtn.addEventListener('click', function() {
+                        window.AuthManager.logout();
+                    });
+                }
+            }
+        });
+    </script>
 </body>
 </html>

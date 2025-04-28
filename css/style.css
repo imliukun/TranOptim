@@ -1196,3 +1196,72 @@ input:checked + .slider:before {
     opacity: 0.8;
     transition: transform 0.1s, opacity 0.1s;
 }
+
+/* 用户信息和登录相关样式 */
+.user-info {
+    display: flex;
+    align-items: center;
+    padding: 15px;
+    background: rgba(0, 0, 0, 0.05);
+    border-top: 1px solid rgba(0, 0, 0, 0.1);
+    margin-top: auto;
+    position: sticky;
+    bottom: 0;
+    width: 100%;
+    box-sizing: border-box;
+}
+
+.user-avatar {
+    margin-right: 10px;
+    font-size: 24px;
+    color: #555;
+}
+
+.user-name {
+    flex-grow: 1;
+    font-weight: 500;
+    font-size: 14px;
+    text-overflow: ellipsis;
+    overflow: hidden;
+    white-space: nowrap;
+}
+
+.logout-btn {
+    background: none;
+    border: none;
+    color: #777;
+    cursor: pointer;
+    padding: 5px 10px;
+    font-size: 14px;
+    display: flex;
+    align-items: center;
+    transition: all 0.2s;
+}
+
+.logout-btn:hover {
+    color: #d32f2f;
+}
+
+.logout-btn i {
+    margin-right: 5px;
+}
+
+/* 响应式样式 */
+@media (max-width: 768px) {
+    .user-info {
+        padding: 10px;
+    }
+    
+    .user-avatar {
+        font-size: 20px;
+    }
+    
+    .user-name {
+        font-size: 12px;
+    }
+    
+    .logout-btn {
+        padding: 3px 6px;
+        font-size: 12px;
+    }
+}
