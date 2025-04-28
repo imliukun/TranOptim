@@ -1,4 +1,7 @@
 // TranOptim - 智能翻译与润色工具 后端服务器
+// 版本: v1.0.1
+// 更新日期: 2024-06-18
+// 描述: 添加版本控制信息
 
 require('dotenv').config();
 const express = require('express');
