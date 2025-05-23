@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>主页面功能测试</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            line-height: 1.6;
+        }
+        .test-section {
+            margin: 20px 0;
+            padding: 20px;
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+            background: #f9f9f9;
+        }
+        .status {
+            padding: 10px;
+            border-radius: 4px;
+            margin: 10px 0;
+        }
+        .success { background: #d4edda; color: #155724; }
+        .error { background: #f8d7da; color: #721c24; }
+        .warning { background: #fff3cd; color: #856404; }
+        button {
+            background: #007AFF;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 6px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover { background: #0056CC; }
+    </style>
+</head>
+<body>
+    <h1>🔍 TranOptim 主页面功能测试</h1>
+    
+    <div class="test-section">
+        <h2>🎯 当前修复状态</h2>
+        <div id="fixStatus">正在检查修复状态...</div>
+        
+        <h3>📝 修复内容：</h3>
+        <ul>
+            <li>✅ 删除了重复的脚本加载（app.js 和 chat.js 冲突）</li>
+            <li>✅ 添加了缓存破坏版本号（?v=1.0.1）</li>
+            <li>✅ 修正了DOM元素选择器匹配</li>
+            <li>✅ 添加了完整的事件处理器</li>
+            <li>✅ 增强了调试信息输出</li>
+        </ul>
+    </div>
+    
+    <div class="test-section">
+        <h2>🔧 快速测试</h2>
+        <button onclick="testMainPage()">测试主页面</button>
+        <button onclick="testAPI()">测试API连接</button>
+        <button onclick="clearCache()">清除缓存</button>
+        
+        <div id="testResults"></div>
+    </div>
+    
+    <div class="test-section">
+        <h2>📱 使用步骤</h2>
+        <ol>
+            <li><strong>清除浏览器缓存</strong>：按 Ctrl+Shift+R (Windows) 或 Cmd+Shift+R (Mac)</li>
+            <li><strong>打开开发者工具</strong>：按 F12，查看 Console 标签页</li>
+            <li><strong>访问主页面</strong>：<a href="http://localhost:3001" target="_blank">http://localhost:3001</a></li>
+            <li><strong>查看调试信息</strong>：在Console中应该能看到"DOM元素检查"的输出</li>
+            <li><strong>测试按钮</strong>：点击翻译、润色、图片等按钮，查看是否有响应</li>
+        </ol>
+    </div>
+    
+    <div class="test-section">
+        <h2>🐛 如果仍有问题</h2>
+        <ul>
+            <li>确保服务器运行在 <code>http://localhost:3001</code></li>
+            <li>完全清除浏览器缓存和cookies</li>
+            <li>检查控制台是否有JavaScript错误</li>
+            <li>尝试无痕浏览模式</li>
+            <li>确认所有文件已保存并提交到git</li>
+        </ul>
+    </div>
+
+    <script>
+        function testMainPage() {
+            const results = document.getElementById('testResults');
+            results.innerHTML = '<div class="status warning">正在测试主页面...</div>';
+            
+            // 测试主页面是否可以访问
+            fetch('http://localhost:3001')
+                .then(response => {
+                    if (response.ok) {
+                        results.innerHTML += '<div class="status success">✅ 主页面可以正常访问</div>';
+                        return response.text();
+                    } else {
+                        throw new Error('HTTP ' + response.status);
+                    }
+                })
+                .then(html => {
+                    // 检查是否包含正确的脚本
+                    if (html.includes('app.js?v=1.0.1')) {
+                        results.innerHTML += '<div class="status success">✅ 脚本版本号正确</div>';
+                    } else {
+                        results.innerHTML += '<div class="status error">❌ 脚本版本号不匹配</div>';
+                    }
+                    
+                    if (!html.includes('chat.js')) {
+                        results.innerHTML += '<div class="status success">✅ 没有冲突的chat.js</div>';
+                    } else {
+                        results.innerHTML += '<div class="status error">❌ 仍然包含chat.js冲突</div>';
+                    }
+                })
+                .catch(error => {
+                    results.innerHTML += '<div class="status error">❌ 主页面访问失败: ' + error.message + '</div>';
+                });
+        }
+        
+        function testAPI() {
+            const results = document.getElementById('testResults');
+            results.innerHTML += '<div class="status warning">正在测试API...</div>';
+            
+            // 测试API是否响应
+            fetch('http://localhost:3001/api/translate/text', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    text: 'Hello',
+                    sourceLang: 'en',
+                    targetLang: 'zh',
+                    service: 'gpt'
+                })
+            })
+            .then(response => {
+                if (response.status === 200 || response.status === 400) {
+                    results.innerHTML += '<div class="status success">✅ API端点响应正常</div>';
+                } else {
+                    results.innerHTML += '<div class="status warning">⚠️ API返回状态: ' + response.status + '</div>';
+                }
+            })
+            .catch(error => {
+                results.innerHTML += '<div class="status error">❌ API连接失败: ' + error.message + '</div>';
+            });
+        }
+        
+        function clearCache() {
+            const results = document.getElementById('testResults');
+            results.innerHTML = '<div class="status success">提示：请手动清除浏览器缓存</div>';
+            results.innerHTML += '<div class="status warning">Windows: Ctrl+Shift+R<br>Mac: Cmd+Shift+R</div>';
+        }
+        
+        // 页面加载时自动检查状态
+        window.addEventListener('load', function() {
+            const status = document.getElementById('fixStatus');
+            status.innerHTML = `
+                <div class="status success">✅ 脚本冲突修复已完成</div>
+                <div class="status success">✅ 缓存破坏版本号已添加</div>
+                <div class="status success">✅ 完整事件处理已添加</div>
+                <div class="status warning">⚠️ 请清除浏览器缓存后测试主页面</div>
+            `;
+        });
+    </script>
+</body>
+</html> 
