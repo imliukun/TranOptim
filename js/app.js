@@ -43,7 +43,13 @@ document.addEventListener('DOMContentLoaded', function() {
         chatMessages: !!chatMessages,
         chatInput: !!chatInput,
         translateBtn: !!translateBtn,
-        polishBtn: !!polishBtn
+        polishBtn: !!polishBtn,
+        uploadImageBtn: !!uploadImageBtn,
+        imageUpload: !!imageUpload,
+        translateSettingsBtn: !!translateSettingsBtn,
+        polishSettingsBtn: !!polishSettingsBtn,
+        newChatBtn: !!newChatBtn,
+        clearChatsBtn: !!clearChatsBtn
     });
     
     // 输入框自动高度调整
@@ -1482,6 +1488,114 @@ document.addEventListener('DOMContentLoaded', function() {
 
     if (apiKeyModal) {
         apiKeyModal.classList.add('hidden');
+    }
+    
+    // 图片上传按钮事件
+    if (uploadImageBtn) {
+        uploadImageBtn.addEventListener('click', () => {
+            console.log('图片上传按钮点击');
+            if (imageUpload) {
+                imageUpload.click();
+            }
+        });
+    }
+    
+    // 图片文件选择事件
+    if (imageUpload) {
+        imageUpload.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (file && file.type.startsWith('image/')) {
+                currentImageFile = file;
+                console.log('图片文件已选择:', file.name);
+                
+                // 更新按钮文本以显示已选择图片
+                if (uploadImageBtn) {
+                    uploadImageBtn.innerHTML = '<i class="fas fa-image"></i> ' + file.name.substring(0, 10) + '...';
+                    uploadImageBtn.style.backgroundColor = '#28a745';
+                }
+                
+                showNotification('图片已选择: ' + file.name);
+            } else {
+                showNotification('请选择有效的图片文件');
+                currentImageFile = null;
+                if (uploadImageBtn) {
+                    uploadImageBtn.innerHTML = '<i class="fas fa-image"></i> 图片';
+                    uploadImageBtn.style.backgroundColor = '';
+                }
+            }
+        });
+    }
+    
+    // 设置面板按钮事件
+    if (translateSettingsBtn) {
+        translateSettingsBtn.addEventListener('click', () => {
+            console.log('翻译设置按钮点击');
+            
+            // 切换翻译设置面板显示/隐藏
+            if (translateSettingsPanel) {
+                if (translateSettingsPanel.style.display === 'block') {
+                    translateSettingsPanel.style.display = 'none';
+                } else {
+                    translateSettingsPanel.style.display = 'block';
+                    // 隐藏润色设置面板
+                    if (polishSettingsPanel) {
+                        polishSettingsPanel.style.display = 'none';
+                    }
+                }
+            }
+        });
+    }
+    
+    if (polishSettingsBtn) {
+        polishSettingsBtn.addEventListener('click', () => {
+            console.log('润色设置按钮点击');
+            
+            // 切换润色设置面板显示/隐藏
+            if (polishSettingsPanel) {
+                if (polishSettingsPanel.style.display === 'block') {
+                    polishSettingsPanel.style.display = 'none';
+                } else {
+                    polishSettingsPanel.style.display = 'block';
+                    // 隐藏翻译设置面板
+                    if (translateSettingsPanel) {
+                        translateSettingsPanel.style.display = 'none';
+                    }
+                }
+            }
+        });
+    }
+    
+    // 关闭设置面板按钮事件
+    closeSettingsBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+            console.log('关闭设置面板');
+            if (translateSettingsPanel) {
+                translateSettingsPanel.style.display = 'none';
+            }
+            if (polishSettingsPanel) {
+                polishSettingsPanel.style.display = 'none';
+            }
+        });
+    });
+    
+    // 添加键盘快捷键支持
+    if (chatInput) {
+        chatInput.addEventListener('keydown', (e) => {
+            // Ctrl+Enter 或 Cmd+Enter 快速翻译
+            if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+                e.preventDefault();
+                if (translateBtn) {
+                    translateBtn.click();
+                }
+            }
+            // Shift+Enter 快速润色
+            else if (e.shiftKey && e.key === 'Enter') {
+                e.preventDefault();
+                if (polishBtn) {
+                    polishBtn.click();
+                }
+            }
+        });
     }
 });
 
