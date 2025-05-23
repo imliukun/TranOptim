@@ -231,63 +231,74 @@ document.addEventListener('DOMContentLoaded', function() {
     let currentMode = 'translate'; // translate, edit, polish
     let translationResult = '';
     
-    // 部分标签切换功能
-    sectionLabels.forEach(label => {
-        label.addEventListener('click', () => {
-            const sectionId = label.id.split('-')[1]; // 获取部分ID: translate, edit, polish
-            
-            // 更新活动标签
-            sectionLabels.forEach(l => l.classList.remove('active'));
-            label.classList.add('active');
-            
-            // 切换模式
-            switchMode(sectionId);
+    // 部分标签切换功能 - 添加null检查
+    if (sectionLabels.length > 0) {
+        sectionLabels.forEach(label => {
+            label.addEventListener('click', () => {
+                const sectionId = label.id.split('-')[1]; // 获取部分ID: translate, edit, polish
+                
+                // 更新活动标签
+                sectionLabels.forEach(l => l.classList.remove('active'));
+                label.classList.add('active');
+                
+                // 切换模式
+                switchMode(sectionId);
+            });
         });
-    });
+    }
     
-    // 标签页切换功能
-    tabBtns.forEach(btn => {
-        btn.addEventListener('click', () => {
-            const tabId = btn.getAttribute('data-tab');
-            
-            // 更新活动标签按钮
-            tabBtns.forEach(b => b.classList.remove('active'));
-            btn.classList.add('active');
-            
-            // 更新活动内容区域
-            tabContents.forEach(content => content.classList.remove('active'));
-            document.getElementById(`${tabId}-input`).classList.add('active');
+    // 标签页切换功能 - 添加null检查
+    if (tabBtns.length > 0) {
+        tabBtns.forEach(btn => {
+            btn.addEventListener('click', () => {
+                const tabId = btn.getAttribute('data-tab');
+                
+                // 更新活动标签按钮
+                tabBtns.forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                
+                // 更新活动内容区域
+                tabContents.forEach(content => content.classList.remove('active'));
+                const targetContent = document.getElementById(`${tabId}-input`);
+                if (targetContent) {
+                    targetContent.classList.add('active');
+                }
+            });
         });
-    });
+    }
     
-    // 图片上传功能
-    uploadArea.addEventListener('click', () => {
-        imageUpload.click();
-    });
-    
-    uploadArea.addEventListener('dragover', (e) => {
-        e.preventDefault();
-        uploadArea.classList.add('active');
-    });
-    
-    uploadArea.addEventListener('dragleave', () => {
-        uploadArea.classList.remove('active');
-    });
-    
-    uploadArea.addEventListener('drop', (e) => {
-        e.preventDefault();
-        uploadArea.classList.remove('active');
+    // 图片上传功能 - 添加null检查
+    if (uploadArea && imageUpload) {
+        uploadArea.addEventListener('click', () => {
+            imageUpload.click();
+        });
         
-        if (e.dataTransfer.files.length) {
-            handleImageUpload(e.dataTransfer.files[0]);
-        }
-    });
+        uploadArea.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadArea.classList.add('active');
+        });
+        
+        uploadArea.addEventListener('dragleave', () => {
+            uploadArea.classList.remove('active');
+        });
+        
+        uploadArea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadArea.classList.remove('active');
+            
+            if (e.dataTransfer.files.length) {
+                handleImageUpload(e.dataTransfer.files[0]);
+            }
+        });
+    }
     
-    imageUpload.addEventListener('change', (e) => {
-        if (e.target.files.length) {
-            handleImageUpload(e.target.files[0]);
-        }
-    });
+    if (imageUpload) {
+        imageUpload.addEventListener('change', (e) => {
+            if (e.target.files.length) {
+                handleImageUpload(e.target.files[0]);
+            }
+        });
+    }
     
     function handleImageUpload(file) {
         if (!file.type.match('image.*')) {
@@ -298,27 +309,31 @@ document.addEventListener('DOMContentLoaded', function() {
         const reader = new FileReader();
         
         reader.onload = function(e) {
-            uploadArea.classList.add('hidden');
-            imagePreview.classList.remove('hidden');
+            if (uploadArea) uploadArea.classList.add('hidden');
+            if (imagePreview) imagePreview.classList.remove('hidden');
             
             // 创建图片预览
-            imagePreview.innerHTML = `
-                <div class="preview-container">
-                    <img src="${e.target.result}" alt="上传的图片">
-                    <button class="remove-btn" title="移除图片">
-                        <i class="fas fa-times"></i>
-                    </button>
-                </div>
-                <p class="image-info">图片已上传，点击翻译按钮开始处理</p>
-            `;
-            
-            // 添加移除图片的功能
-            const removeBtn = imagePreview.querySelector('.remove-btn');
-            removeBtn.addEventListener('click', () => {
-                imagePreview.classList.add('hidden');
-                uploadArea.classList.remove('hidden');
-                imageUpload.value = '';
-            });
+            if (imagePreview) {
+                imagePreview.innerHTML = `
+                    <div class="preview-container">
+                        <img src="${e.target.result}" alt="上传的图片">
+                        <button class="remove-btn" title="移除图片">
+                            <i class="fas fa-times"></i>
+                        </button>
+                    </div>
+                    <p class="image-info">图片已上传，点击翻译按钮开始处理</p>
+                `;
+                
+                // 添加移除图片的功能
+                const removeBtn = imagePreview.querySelector('.remove-btn');
+                if (removeBtn) {
+                    removeBtn.addEventListener('click', () => {
+                        imagePreview.classList.add('hidden');
+                        if (uploadArea) uploadArea.classList.remove('hidden');
+                        if (imageUpload) imageUpload.value = '';
+                    });
+                }
+            }
         };
         
         reader.readAsDataURL(file);
@@ -856,8 +871,10 @@ document.addEventListener('DOMContentLoaded', function() {
     // 移除加载元素
     function removeLoadingElements() {
         // 移除按钮的加载状态
-        translateBtn.classList.remove('loading');
-        translateBtn.disabled = false;
+        if (translateBtn) {
+            translateBtn.classList.remove('loading');
+            translateBtn.disabled = false;
+        }
         
         // 移除中心加载提示
         hideCenterLoading();
@@ -882,172 +899,203 @@ document.addEventListener('DOMContentLoaded', function() {
         return langNames[langCode] || langCode;
     }
     
-    // 点击翻译结果区域直接进入编辑模式
-    resultContent.addEventListener('click', () => {
-        if (resultContent.textContent !== '翻译结果将显示在这里...' && !resultContent.classList.contains('hidden')) {
+    // 点击翻译结果区域直接进入编辑模式 - 添加null检查
+    if (resultContent) {
+        resultContent.addEventListener('click', () => {
+            if (resultContent.textContent !== '翻译结果将显示在这里...' && !resultContent.classList.contains('hidden')) {
+                switchToEditMode();
+            }
+        });
+    }
+    
+    // 编辑按钮功能 - 添加null检查
+    if (editResultBtn) {
+        editResultBtn.addEventListener('click', () => {
             switchToEditMode();
-        }
-    });
+        });
+    }
     
-    // 编辑按钮功能
-    editResultBtn.addEventListener('click', () => {
-        switchToEditMode();
-    });
+    // 润色按钮功能 - 添加null检查
+    if (polishResultBtn) {
+        polishResultBtn.addEventListener('click', () => {
+            switchToPolishMode();
+        });
+    }
     
-    // 润色按钮功能
-    polishResultBtn.addEventListener('click', () => {
-        switchToPolishMode();
-    });
-    
-    // 复制结果功能
-    copyResultBtn.addEventListener('click', () => {
-        if (resultContent.textContent === '翻译结果将显示在这里...') {
-            return;
-        }
-        
-        copyTextToClipboard(resultContent.textContent);
-        showNotification('已复制到剪贴板！');
-    });
-    
-    // 复制润色结果功能
-    copyPolishResultBtn.addEventListener('click', () => {
-        if (polishResult.textContent === '润色结果将显示在这里...') {
-            return;
-        }
-        
-        copyTextToClipboard(polishResult.textContent);
-        showNotification('已复制到剪贴板！');
-    });
-    
-    // 开始润色按钮点击事件
-    startPolishBtn.addEventListener('click', function() {
-        console.log('--- 双重润色请求开始 ---');
-        // 获取要润色的文本
-        const textToPolish = editText.value || translationResult;
-        
-        // 检查文本是否为空
-        if (!textToPolish.trim()) {
-            showNotification('请先输入或翻译内容');
-            return;
-        }
-        
-        // 获取选中的润色服务
-        const selectedService = document.querySelector('input[name="polish-service"]:checked').value;
-        
-        // 添加加载效果
-        startPolishBtn.disabled = true;
-        
-        // 显示中心加载提示
-        const serviceName = getServiceDisplayName(selectedService);
-        
-        // 根据服务类型决定是否显示网络状态
-        const needsNetworkCheck = ['gpt', 'gemini'].includes(selectedService);
-        
-        showCenterLoading(
-            `正在使用${serviceName}润色文本`,
-            `同时生成两种风格的润色结果`,
-            needsNetworkCheck
-        );
-        
-        // 显示结果区域但先清空
-        polishResultArea.classList.remove('hidden');
-        polishResult.innerHTML = '<div class="loading-placeholder">正在润色文本，请稍候...</div>';
-        
-        // 准备请求数据
-        const requestData = {
-            text: textToPolish,
-            service: selectedService
-        };
-        
-        // 添加安全超时，确保加载提示最终会被移除
-        const safetyTimeout = setTimeout(() => {
-            console.log('润色安全超时触发：强制移除加载状态');
-            startPolishBtn.disabled = false;
-            hideCenterLoading();
-            showNotification('润色请求处理时间过长，已自动停止等待', 'warning');
-        }, 10000); // 10秒超时（因为现在处理两种润色结果需要更多时间）
-
-        // 发送润色请求到新的双重润色接口
-        fetch('/api/polish/dual', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify(requestData)
-        })
-        .then(response => response.json())
-        .then(data => {
-            console.log('双重润色响应:', data);
-            
-            // 清除安全超时
-            clearTimeout(safetyTimeout);
-            
-            // 移除加载状态
-            startPolishBtn.disabled = false;
-            hideCenterLoading();
-            
-            // 检查响应
-            if (data.error && !data.result) {
-                // 显示错误
-                polishResult.innerHTML = `
-                    <div class="error-result">
-                        <p><i class="fas fa-exclamation-circle"></i> 润色失败</p>
-                        <p class="error-message">${data.error}</p>
-                    </div>
-                `;
-                showNotification('润色失败: ' + data.error);
+    // 复制结果功能 - 添加null检查
+    if (copyResultBtn) {
+        copyResultBtn.addEventListener('click', () => {
+            if (resultContent && resultContent.textContent === '翻译结果将显示在这里...') {
                 return;
             }
             
-            if (!data.result) {
-                polishResult.innerHTML = `
-                    <div class="error-result">
-                        <p><i class="fas fa-exclamation-circle"></i> 润色失败</p>
-                        <p class="error-message">服务器返回了空结果</p>
-                    </div>
-                `;
-                showNotification('润色失败: 服务器返回了空结果');
+            if (resultContent) {
+                copyTextToClipboard(resultContent.textContent);
+                showNotification('已复制到剪贴板！');
+            }
+        });
+    }
+    
+    // 复制润色结果功能 - 添加null检查
+    if (copyPolishResultBtn) {
+        copyPolishResultBtn.addEventListener('click', () => {
+            if (polishResult && polishResult.textContent === '润色结果将显示在这里...') {
                 return;
             }
             
-            // 显示双重润色结果
-            displayDualPolishResult(
-                data.result.originalText, 
-                data.result.normalText, 
-                data.result.rephraseText, 
-                data.result.service
+            if (polishResult) {
+                copyTextToClipboard(polishResult.textContent);
+                showNotification('已复制到剪贴板！');
+            }
+        });
+    }
+    
+    // 开始润色按钮点击事件 - 添加null检查
+    if (startPolishBtn) {
+        startPolishBtn.addEventListener('click', function() {
+            console.log('--- 双重润色请求开始 ---');
+            // 获取要润色的文本
+            const textToPolish = (editText ? editText.value : '') || translationResult;
+            
+            // 检查文本是否为空
+            if (!textToPolish.trim()) {
+                showNotification('请先输入或翻译内容');
+                return;
+            }
+            
+            // 获取选中的润色服务
+            const selectedServiceEl = document.querySelector('input[name="polish-service"]:checked');
+            if (!selectedServiceEl) {
+                showNotification('请选择润色服务');
+                return;
+            }
+            const selectedService = selectedServiceEl.value;
+            
+            // 添加加载效果
+            startPolishBtn.disabled = true;
+            
+            // 显示中心加载提示
+            const serviceName = getServiceDisplayName(selectedService);
+            
+            // 根据服务类型决定是否显示网络状态
+            const needsNetworkCheck = ['gpt', 'gemini'].includes(selectedService);
+            
+            showCenterLoading(
+                `正在使用${serviceName}润色文本`,
+                `同时生成两种风格的润色结果`,
+                needsNetworkCheck
             );
             
-            // 显示成功通知
-            showNotification('双重润色完成！');
-        })
-        .catch(error => {
-            console.error('润色请求失败:', error);
+            // 显示结果区域但先清空
+            if (polishResultArea) {
+                polishResultArea.classList.remove('hidden');
+            }
+            if (polishResult) {
+                polishResult.innerHTML = '<div class="loading-placeholder">正在润色文本，请稍候...</div>';
+            }
             
-            // 清除安全超时
-            clearTimeout(safetyTimeout);
+            // 准备请求数据
+            const requestData = {
+                text: textToPolish,
+                service: selectedService
+            };
             
-            // 移除加载状态
-            startPolishBtn.disabled = false;
-            hideCenterLoading();
-            
-            // 显示错误
-            polishResult.innerHTML = `
-                <div class="error-result">
-                    <p><i class="fas fa-exclamation-circle"></i> 润色请求失败</p>
-                    <p class="error-message">${error.message}</p>
-                </div>
-            `;
-            
-            showNotification('润色失败: ' + error.message);
-        })
-        .finally(() => {
-            // 再次确保加载状态被清除（双重保障）
-            startPolishBtn.disabled = false;
-            hideCenterLoading();
-            console.log('润色处理完成：所有加载状态已移除');
+            // 添加安全超时，确保加载提示最终会被移除
+            const safetyTimeout = setTimeout(() => {
+                console.log('润色安全超时触发：强制移除加载状态');
+                startPolishBtn.disabled = false;
+                hideCenterLoading();
+                showNotification('润色请求处理时间过长，已自动停止等待', 'warning');
+            }, 10000); // 10秒超时（因为现在处理两种润色结果需要更多时间）
+
+            // 发送润色请求到新的双重润色接口
+            fetch('/api/polish/dual', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(requestData)
+            })
+            .then(response => response.json())
+            .then(data => {
+                console.log('双重润色响应:', data);
+                
+                // 清除安全超时
+                clearTimeout(safetyTimeout);
+                
+                // 移除加载状态
+                startPolishBtn.disabled = false;
+                hideCenterLoading();
+                
+                // 检查响应
+                if (data.error && !data.result) {
+                    // 显示错误
+                    if (polishResult) {
+                        polishResult.innerHTML = `
+                            <div class="error-result">
+                                <p><i class="fas fa-exclamation-circle"></i> 润色失败</p>
+                                <p class="error-message">${data.error}</p>
+                            </div>
+                        `;
+                    }
+                    showNotification('润色失败: ' + data.error);
+                    return;
+                }
+                
+                if (!data.result) {
+                    if (polishResult) {
+                        polishResult.innerHTML = `
+                            <div class="error-result">
+                                <p><i class="fas fa-exclamation-circle"></i> 润色失败</p>
+                                <p class="error-message">服务器返回了空结果</p>
+                            </div>
+                        `;
+                    }
+                    showNotification('润色失败: 服务器返回了空结果');
+                    return;
+                }
+                
+                // 显示双重润色结果
+                displayDualPolishResult(
+                    data.result.originalText, 
+                    data.result.normalText, 
+                    data.result.rephraseText, 
+                    data.result.service
+                );
+                
+                // 显示成功通知
+                showNotification('双重润色完成！');
+            })
+            .catch(error => {
+                console.error('润色请求失败:', error);
+                
+                // 清除安全超时
+                clearTimeout(safetyTimeout);
+                
+                // 移除加载状态
+                startPolishBtn.disabled = false;
+                hideCenterLoading();
+                
+                // 显示错误
+                if (polishResult) {
+                    polishResult.innerHTML = `
+                        <div class="error-result">
+                            <p><i class="fas fa-exclamation-circle"></i> 润色请求失败</p>
+                            <p class="error-message">${error.message}</p>
+                        </div>
+                    `;
+                }
+                
+                showNotification('润色失败: ' + error.message);
+            })
+            .finally(() => {
+                // 再次确保加载状态被清除（双重保障）
+                startPolishBtn.disabled = false;
+                hideCenterLoading();
+                console.log('润色处理完成：所有加载状态已移除');
+            });
         });
-    });
+    }
     
     // 获取润色风格名称
     function getPolishStyleName(styleCode) {
@@ -1417,21 +1465,37 @@ document.addEventListener('DOMContentLoaded', function() {
         `;
         
         try {
-            // 设置润色结果内容
-            document.getElementById('polish-result').innerHTML = resultHTML;
+            // 设置润色结果内容 - 添加null检查
+            const polishResultElement = document.getElementById('polish-result');
+            if (polishResultElement) {
+                polishResultElement.innerHTML = resultHTML;
+                console.log('[displayDualPolishResult] HTML 设置成功');
+            } else {
+                console.warn('[displayDualPolishResult] polish-result 元素不存在');
+            }
             
-            // 显示润色结果区域
-            document.getElementById('polish-result-area').classList.remove('hidden');
-            console.log('[displayDualPolishResult] HTML 设置成功');
+            // 显示润色结果区域 - 添加null检查
+            const polishResultAreaElement = document.getElementById('polish-result-area');
+            if (polishResultAreaElement) {
+                polishResultAreaElement.classList.remove('hidden');
+            } else {
+                console.warn('[displayDualPolishResult] polish-result-area 元素不存在');
+            }
         } catch (e) {
             console.error('[displayDualPolishResult] 设置 innerHTML 失败:', e);
         }
         
-        // 隐藏设置区域
-        document.getElementById('polish-options-area').classList.add('hidden');
+        // 隐藏设置区域 - 添加null检查
+        const polishOptionsAreaElement = document.getElementById('polish-options-area');
+        if (polishOptionsAreaElement) {
+            polishOptionsAreaElement.classList.add('hidden');
+        }
         
-        // 滚动到结果区域
-        document.getElementById('polish-result-area').scrollIntoView({ behavior: 'smooth' });
+        // 滚动到结果区域 - 添加null检查
+        const scrollTargetElement = document.getElementById('polish-result-area');
+        if (scrollTargetElement) {
+            scrollTargetElement.scrollIntoView({ behavior: 'smooth' });
+        }
         console.log('[displayDualPolishResult] 双重润色结果显示完毕');
     }
 
@@ -1468,21 +1532,37 @@ document.addEventListener('DOMContentLoaded', function() {
         `;
         
         try {
-            // 设置润色结果内容
-            document.getElementById('polish-result').innerHTML = resultHTML;
+            // 设置润色结果内容 - 添加null检查
+            const polishResultElement = document.getElementById('polish-result');
+            if (polishResultElement) {
+                polishResultElement.innerHTML = resultHTML;
+                console.log('[displayPolishResult] HTML 设置成功');
+            } else {
+                console.warn('[displayPolishResult] polish-result 元素不存在');
+            }
             
-            // 显示润色结果区域
-            document.getElementById('polish-result-area').classList.remove('hidden');
-            console.log('[displayPolishResult] HTML 设置成功');
+            // 显示润色结果区域 - 添加null检查
+            const polishResultAreaElement = document.getElementById('polish-result-area');
+            if (polishResultAreaElement) {
+                polishResultAreaElement.classList.remove('hidden');
+            } else {
+                console.warn('[displayPolishResult] polish-result-area 元素不存在');
+            }
         } catch (e) {
             console.error('[displayPolishResult] 设置 innerHTML 失败:', e);
         }
         
-        // 隐藏设置区域
-        document.getElementById('polish-options-area').classList.add('hidden');
+        // 隐藏设置区域 - 添加null检查
+        const polishOptionsAreaElement = document.getElementById('polish-options-area');
+        if (polishOptionsAreaElement) {
+            polishOptionsAreaElement.classList.add('hidden');
+        }
         
-        // 滚动到结果区域
-        document.getElementById('polish-result-area').scrollIntoView({ behavior: 'smooth' });
+        // 滚动到结果区域 - 添加null检查
+        const scrollTargetElement = document.getElementById('polish-result-area');
+        if (scrollTargetElement) {
+            scrollTargetElement.scrollIntoView({ behavior: 'smooth' });
+        }
         console.log('[displayPolishResult] 结果显示完毕');
     }
 
