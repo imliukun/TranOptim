@@ -39,6 +39,63 @@ document.addEventListener('DOMContentLoaded', function() {
     const polishLanguage = document.getElementById('polishLanguage');
     const customInstructions = document.getElementById('customInstructions');
     
+    // 自动调整输入框高度的函数
+    function autoResizeInput() {
+        if (!chatInput) return;
+        
+        console.log('调整输入框高度');
+        
+        // 保存当前滚动位置
+        const scrollTop = chatInput.scrollTop;
+        
+        // 重置高度，以便正确计算
+        chatInput.style.height = 'auto';
+        
+        // 计算新高度 (取内容高度和最小高度中的较大值，但不超过最大高度)
+        const minHeight = 40; // 最小高度设为40px
+        const scrollHeight = chatInput.scrollHeight;
+        const maxHeight = 200; // 最大高度
+        
+        console.log('输入框滚动高度:', scrollHeight);
+        
+        // 设置高度
+        const newHeight = Math.max(minHeight, Math.min(scrollHeight, maxHeight));
+        chatInput.style.height = newHeight + 'px';
+        
+        // 如果达到最大高度，允许滚动
+        if (newHeight >= maxHeight) {
+            chatInput.style.overflowY = 'auto';
+            // 恢复滚动位置
+            chatInput.scrollTop = scrollTop;
+        } else {
+            chatInput.style.overflowY = 'hidden';
+        }
+        
+        console.log('新输入框高度:', newHeight, 'px');
+    }
+    
+    // 在输入框内容变化时触发高度调整
+    chatInput.addEventListener('input', autoResizeInput);
+    
+    // 添加更多触发条件
+    chatInput.addEventListener('change', autoResizeInput);
+    chatInput.addEventListener('focus', autoResizeInput);
+    chatInput.addEventListener('paste', function() {
+        setTimeout(autoResizeInput, 10);
+    });
+    chatInput.addEventListener('keydown', function(e) {
+        // 对于退格键和删除键，也需要调整高度
+        if (e.key === 'Backspace' || e.key === 'Delete') {
+            setTimeout(autoResizeInput, 10);
+        }
+    });
+    
+    // 在窗口调整大小时也调整高度
+    window.addEventListener('resize', autoResizeInput);
+    
+    // 延迟调用一次以初始化
+    setTimeout(autoResizeInput, 100);
+    
     // 创建用于显示图片缩略图的容器
     let imagePreviewContainer = document.createElement('div');
     imagePreviewContainer.className = 'image-preview-container';
@@ -769,97 +826,107 @@ document.addEventListener('DOMContentLoaded', function() {
             return;
         }
         
-        const messageElement = document.createElement('div');
-        messageElement.className = 'message ai';
-        messageElement.id = `message-${messageCounter++}`;
+        const messageId = 'msg-' + (++messageCounter);
         
         // 消息内容容器
-        const contentElement = document.createElement('div');
-        contentElement.className = 'message-content';
+        const messageDiv = document.createElement('div');
+        messageDiv.className = 'message ai';
+        messageDiv.id = messageId;
+        
+        const contentDiv = document.createElement('div');
+        contentDiv.className = 'message-content';
         
         // 服务标识
-        const serviceElement = document.createElement('div');
-        serviceElement.className = 'service-badge';
+        const serviceInfo = document.createElement('div');
+        serviceInfo.className = 'service-info';
         
         // 确保result.service存在，否则使用默认值
         const serviceCode = result.service ? result.service.toLowerCase() : 'unknown';
         const serviceEmoji = getServiceEmoji(serviceCode);
         const serviceName = getServiceDisplayName(result.service || 'unknown');
         
-        serviceElement.innerHTML = `${serviceEmoji} ${serviceName}`;
-        contentElement.appendChild(serviceElement);
+        serviceInfo.innerHTML = `<span>${serviceEmoji} 由 ${serviceName} 提供的翻译</span>`;
+        contentDiv.appendChild(serviceInfo);
         
-        // 判断是否是图片OCR结果
-        if (result.ocrText) {
-            // 创建原始OCR文本区域
-            const ocrElement = document.createElement('div');
-            ocrElement.className = 'ocr-result';
+        // 判断是否是图片OCR结果，如果是，显示OCR结果
+        if (result.ocrText && result.ocrText.trim() !== '') {
+            const ocrDiv = document.createElement('div');
+            ocrDiv.className = 'ocr-result';
             
-            // OCR标题
             const ocrTitle = document.createElement('div');
             ocrTitle.className = 'result-title';
-            ocrTitle.innerHTML = '<i class="bi bi-card-text"></i> OCR识别结果:';
-            ocrElement.appendChild(ocrTitle);
+            ocrTitle.innerHTML = '<i class="fas fa-file-alt"></i> OCR识别结果';
+            ocrDiv.appendChild(ocrTitle);
             
-            // OCR文本
             const ocrText = document.createElement('div');
             ocrText.className = 'ocr-text';
             ocrText.textContent = result.ocrText;
-            ocrElement.appendChild(ocrText);
+            ocrDiv.appendChild(ocrText);
             
-            // 添加OCR结果
-            contentElement.appendChild(ocrElement);
+            contentDiv.appendChild(ocrDiv);
             
             // 添加分隔线
             const divider = document.createElement('div');
             divider.className = 'result-divider';
-            contentElement.appendChild(divider);
+            contentDiv.appendChild(divider);
         }
         
-        // 翻译结果
-        const translationElement = document.createElement('div');
-        translationElement.className = 'translation-result';
+        // 添加翻译结果
+        const translationDiv = document.createElement('div');
+        translationDiv.className = 'translation-result';
         
-        // 翻译标题
         const translationTitle = document.createElement('div');
         translationTitle.className = 'result-title';
         
-        // 显示翻译方向 (如果存在)
+        // 显示翻译方向
         if (result.fromLang && result.toLang) {
-            const fromName = getLanguageName(result.fromLang);
-            const toName = getLanguageName(result.toLang);
-            translationTitle.innerHTML = `<i class="bi bi-translate"></i> ${fromName} → ${toName} 翻译:`;
+            const fromLangName = getLanguageName(result.fromLang);
+            const toLangName = getLanguageName(result.toLang);
+            translationTitle.innerHTML = `<i class="fas fa-language"></i> ${fromLangName} → ${toLangName} 翻译`;
         } else {
-            translationTitle.innerHTML = '<i class="bi bi-translate"></i> 翻译结果:';
+            translationTitle.innerHTML = '<i class="fas fa-language"></i> 翻译结果';
         }
         
-        translationElement.appendChild(translationTitle);
+        translationDiv.appendChild(translationTitle);
         
         // 翻译文本
-        const translationText = document.createElement('div');
-        translationText.className = 'translation-text';
-        translationText.textContent = result.translatedText;
-        translationElement.appendChild(translationText);
+        const translatedText = document.createElement('div');
+        translatedText.className = 'translated-text';
+        translatedText.textContent = result.translatedText;
+        translationDiv.appendChild(translatedText);
         
-        // 添加翻译结果
-        contentElement.appendChild(translationElement);
+        contentDiv.appendChild(translationDiv);
         
         // 添加操作按钮
         const actionButtons = document.createElement('div');
         actionButtons.className = 'message-actions';
         
-        // 复制按钮
+        // 复制按钮 - 只复制翻译结果，不复制OCR结果
         const copyButton = document.createElement('button');
         copyButton.className = 'action-btn copy-btn';
-        copyButton.innerHTML = '<i class="bi bi-clipboard"></i> 复制';
+        copyButton.innerHTML = '<i class="fas fa-clipboard"></i> 复制';
         copyButton.addEventListener('click', function() {
-            // 如果有OCR结果，复制OCR和翻译结果
-            let textToCopy = result.ocrText ? 
-                `OCR识别结果:\n${result.ocrText}\n\n翻译结果:\n${result.translatedText}` : 
-                result.translatedText;
-                
-            copyTextToClipboard(textToCopy);
-            showNotification('已复制到剪贴板');
+            console.log('复制按钮点击 - 仅复制翻译结果');
+            console.log('翻译结果:', result.translatedText);
+            // 只复制翻译结果
+            if (navigator.clipboard && window.isSecureContext) {
+                // 使用现代Clipboard API
+                navigator.clipboard.writeText(result.translatedText)
+                    .then(() => {
+                        console.log('使用Clipboard API复制成功');
+                        showNotification('已复制到剪贴板', this);
+                    })
+                    .catch(err => {
+                        console.error('Clipboard API复制失败:', err);
+                        // 回退到传统方法
+                        copyTextToClipboard(result.translatedText);
+                        showNotification('已复制到剪贴板', this);
+                    });
+            } else {
+                // 使用传统方法
+                copyTextToClipboard(result.translatedText);
+                showNotification('已复制到剪贴板', this);
+            }
         });
         
         actionButtons.appendChild(copyButton);
@@ -867,37 +934,35 @@ document.addEventListener('DOMContentLoaded', function() {
         // 添加复制到对话框按钮
         const copyToInputButton = document.createElement('button');
         copyToInputButton.className = 'action-btn copy-to-input-btn';
-        copyToInputButton.innerHTML = '<i class="bi bi-arrow-return-left"></i> 复制到对话框';
+        copyToInputButton.innerHTML = '<i class="fas fa-arrow-right"></i> 复制到对话框';
         copyToInputButton.addEventListener('click', function() {
             chatInput.value = result.translatedText;
             chatInput.focus();
-            showNotification('已复制到对话框');
+            showNotification('已复制到对话框', this);
+            setTimeout(autoResizeInput, 0); // 触发输入框高度调整
         });
         
         actionButtons.appendChild(copyToInputButton);
         
-        // 添加操作按钮
-        contentElement.appendChild(actionButtons);
+        contentDiv.appendChild(actionButtons);
         
-        // 添加消息内容到消息元素
-        messageElement.appendChild(contentElement);
+        // 将消息内容添加到消息元素
+        messageDiv.appendChild(contentDiv);
         
-        // 添加消息元素到聊天区域
-        chatMessages.appendChild(messageElement);
+        // 添加到聊天区域
+        chatMessages.appendChild(messageDiv);
         
         // 保存消息到当前对话
         if (saveToHistory) {
             saveMessageToCurrentConversation({
                 type: 'ai',
-                translationResult: result, // 修改为保存完整的翻译结果对象
+                translationResult: result,
                 time: new Date().toISOString()
             });
         }
         
-        // 添加到输入记忆中
-        if (result.originalText) {
-            addToInputHistory(result.originalText);
-        }
+        // 滚动到底部
+        scrollToBottom();
     }
     
     // 添加新的双风格润色消息函数
@@ -959,36 +1024,47 @@ document.addEventListener('DOMContentLoaded', function() {
         
         chatMessages.insertAdjacentHTML('beforeend', messageHTML);
         
-        // 添加复制常规风格按钮事件
+        // 添加复制常规风格按钮的事件处理
         document.querySelector(`#${messageId} .copy-btn-normal`).addEventListener('click', function() {
             copyTextToClipboard(normalText);
-            showNotification('已复制常规优化风格结果到剪贴板！');
+            // 修改：在按钮旁显示通知
+            showNotification('已复制常规风格', this);
         });
         
-        // 添加复制转换风格按钮事件
+        // 添加复制转换风格按钮的事件处理
         document.querySelector(`#${messageId} .copy-btn-rephrase`).addEventListener('click', function() {
             copyTextToClipboard(rephraseText);
-            showNotification('已复制转换语言风格结果到剪贴板！');
+            // 修改：在按钮旁显示通知
+            showNotification('已复制转换风格', this);
         });
         
-        // 添加复制到对话框按钮事件
+        // 添加复制到对话框按钮的事件处理
         document.querySelector(`#${messageId} .copy-to-input-btn`).addEventListener('click', function() {
-            chatInput.value = normalText; // 默认复制常规风格文本
+            chatInput.value = normalText; // 默认使用常规风格
             chatInput.focus();
-            showNotification('已复制到对话框！');
+            // 修改：在按钮旁显示通知
+            showNotification('已复制到对话框', this);
+            // 触发输入框高度调整
+            setTimeout(autoResizeInput, 0);
         });
         
-        // 保存消息到当前对话
+        // 保存聊天消息到对话历史
         saveMessageToCurrentConversation({
             type: 'ai',
             polishResult: {
-                ...result,
                 normalStyle: normalText,
-                rephraseStyle: rephraseText
+                rephraseStyle: rephraseText,
+                service: result.service
             },
-            timestamp: new Date().toISOString()
+            time: new Date().toISOString()
         });
         
+        // 添加到输入记忆中
+        if (result.originalText) {
+            addToInputHistory(result.originalText);
+        }
+        
+        // 滚动到底部
         scrollToBottom();
     }
     
@@ -1019,7 +1095,20 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // 新对话按钮事件
     newChatBtn.addEventListener('click', () => {
+        // 保存当前的翻译和润色模型设置
+        const currentTranslateService = document.querySelector('input[name="translate-service"]:checked')?.value || 'gpt';
+        const currentPolishService = document.querySelector('input[name="polish-service"]:checked')?.value || 'gpt';
+        
+        // 使用原有的创建新对话功能
         createNewConversation();
+        
+        // 确保新对话时保留选定的翻译和润色模型
+        document.querySelector(`input[name="translate-service"][value="${currentTranslateService}"]`)?.checked = true;
+        document.querySelector(`input[name="polish-service"][value="${currentPolishService}"]`)?.checked = true;
+        
+        // 保存设置到localStorage
+        localStorage.setItem('lastTranslateService', currentTranslateService);
+        localStorage.setItem('lastPolishService', currentPolishService);
     });
     
     // 清空所有对话按钮事件
@@ -1038,16 +1127,48 @@ document.addEventListener('DOMContentLoaded', function() {
     }
     
     // 显示通知函数
-    function showNotification(message) {
-        if (!notification) return;
-        
-        notification.textContent = message;
-        notification.classList.add('show');
-        
-        // 3秒后自动隐藏
-        setTimeout(() => {
-            notification.classList.remove('show');
-        }, 3000);
+    function showNotification(message, target = null) {
+        // 如果提供了目标元素，则显示目标元素旁的通知
+        if (target && target instanceof HTMLElement) {
+            // 检查元素上是否已经有通知，如果有则删除
+            const existingNotification = target.querySelector('.button-notification');
+            if (existingNotification) {
+                existingNotification.remove();
+            }
+            
+            // 创建新的通知元素
+            const buttonNotification = document.createElement('div');
+            buttonNotification.className = 'button-notification';
+            buttonNotification.textContent = message;
+            
+            // 添加到目标元素
+            target.appendChild(buttonNotification);
+            
+            // 显示通知
+            setTimeout(() => {
+                buttonNotification.classList.add('show');
+            }, 10);
+            
+            // 3秒后自动隐藏
+            setTimeout(() => {
+                buttonNotification.classList.remove('show');
+                // 动画完成后移除元素
+                setTimeout(() => {
+                    buttonNotification.remove();
+                }, 300);
+            }, 2000);
+        } else {
+            // 使用全局通知
+            if (!notification) return;
+            
+            notification.textContent = message;
+            notification.classList.add('show');
+            
+            // 3秒后自动隐藏
+            setTimeout(() => {
+                notification.classList.remove('show');
+            }, 3000);
+        }
     }
     
     // 复制文本到剪贴板函数
@@ -1405,14 +1526,18 @@ document.addEventListener('DOMContentLoaded', function() {
         // 添加复制按钮事件
         document.querySelector(`#${messageId} .copy-btn`).addEventListener('click', function() {
             copyTextToClipboard(result.translatedText);
-            showNotification('已复制润色结果到剪贴板！');
+            // 修改：在按钮旁显示通知
+            showNotification('已复制润色结果', this);
         });
         
         // 添加复制到对话框按钮事件
         document.querySelector(`#${messageId} .copy-to-input-btn`).addEventListener('click', function() {
             chatInput.value = result.translatedText;
             chatInput.focus();
-            showNotification('已复制到对话框！');
+            // 修改：在按钮旁显示通知
+            showNotification('已复制到对话框', this);
+            // 触发输入框高度调整
+            setTimeout(autoResizeInput, 0);
         });
         
         // 保存消息到当前对话
@@ -1420,10 +1545,39 @@ document.addEventListener('DOMContentLoaded', function() {
             saveMessageToCurrentConversation({
                 type: 'ai',
                 polishResult: result,
-                timestamp: new Date().toISOString()
+                time: new Date().toISOString()
             });
         }
         
         scrollToBottom();
     }
+
+    // 上次使用的模型设置
+    let lastTranslateService = localStorage.getItem('lastTranslateService') || 'gpt';
+    let lastPolishService = localStorage.getItem('lastPolishService') || 'gpt';
+    
+    // 应用上次使用的设置
+    document.querySelector(`input[name="translate-service"][value="${lastTranslateService}"]`)?.checked = true;
+    document.querySelector(`input[name="polish-service"][value="${lastPolishService}"]`)?.checked = true;
+    
+    // 监听翻译服务选择变化
+    document.querySelectorAll('input[name="translate-service"]').forEach(radio => {
+        radio.addEventListener('change', function() {
+            if (this.checked) {
+                localStorage.setItem('lastTranslateService', this.value);
+            }
+        });
+    });
+    
+    // 监听润色服务选择变化
+    document.querySelectorAll('input[name="polish-service"]').forEach(radio => {
+        radio.addEventListener('change', function() {
+            if (this.checked) {
+                localStorage.setItem('lastPolishService', this.value);
+            }
+        });
+    });
+    
+    // 初始化调用一次自动调整输入框高度
+    autoResizeInput();
 });

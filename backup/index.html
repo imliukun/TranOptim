@@ -6,71 +6,42 @@
     <title>TranOptim - 智能翻译与润色工具</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="stylesheet" href="css/style.css">
-    <!-- 添加输入框调整高度相关样式 -->
-    <style>
-        /* 输入框高度调整样式 */
-        .textarea-wrapper {
-            position: relative;
-            width: 100%;
-        }
+    <link rel="stylesheet" href="css/chat.css">
+    <!-- 紧急修复脚本 -->
+    <script>
+        // 记录初始化时间
+        window.TranOptimPageLoadTime = new Date().getTime();
+        console.log('[初始化] 页面开始加载:', window.TranOptimPageLoadTime);
         
-        .chat-input {
-            width: 100%;
-            min-height: 40px;
-            max-height: 200px;
-            padding: 10px;
-            border: 1px solid #ccc;
-            border-radius: 5px;
-            font-size: 14px;
-            line-height: 1.5;
-            resize: none;
-            transition: height 0.2s ease;
-            overflow-y: hidden;
-        }
+        // 添加全局错误监听
+        window.addEventListener('error', function(event) {
+            console.error('[全局错误]', event.message, 
+                          '位置:', event.filename, 
+                          '行:', event.lineno, 
+                          '列:', event.colno);
+        });
         
-        /* 按钮点击反馈样式 */
-        .button-clicked {
-            transform: scale(0.95);
-            opacity: 0.8;
-            transition: transform 0.1s, opacity 0.1s;
-        }
-        
-        /* 图片预览容器样式 */
-        .image-preview-container {
-            margin-bottom: 10px;
-            border-radius: 5px;
-            overflow: hidden;
-            position: relative;
-        }
-        
-        .preview-wrapper {
-            position: relative;
-            max-height: 200px;
-            overflow: hidden;
-        }
-        
-        .preview-image {
-            max-width: 100%;
-            max-height: 200px;
-            display: block;
-        }
-        
-        .remove-image-btn {
-            position: absolute;
-            top: 5px;
-            right: 5px;
-            background: rgba(0, 0, 0, 0.7);
-            color: white;
-            border: none;
-            border-radius: 50%;
-            width: 26px;
-            height: 26px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            cursor: pointer;
-        }
-    </style>
+        // 按钮点击保底处理
+        document.addEventListener('click', function(e) {
+            // 检查是否点击的是翻译或润色按钮
+            if (e.target && (
+                e.target.id === 'translateBtn' || 
+                e.target.closest('#translateBtn') ||
+                e.target.id === 'polishBtn' || 
+                e.target.closest('#polishBtn')
+            )) {
+                console.log('[保底处理] 检测到按钮点击:', 
+                    e.target.id || (e.target.closest('button') ? e.target.closest('button').id : '未知按钮'));
+                
+                // 为按钮添加视觉反馈
+                const btn = e.target.closest('button');
+                if (btn) {
+                    btn.classList.add('active');
+                    setTimeout(() => btn.classList.remove('active'), 200);
+                }
+            }
+        }, true); // 使用捕获阶段
+    </script>
     <!-- 认证配置和脚本 -->
     <script src="auth-config.js"></script>
     <script src="js/auth.js"></script>
@@ -85,10 +56,10 @@
                 <div class="sidebar-header">
                     <h2>TranOptim</h2>
                     <div class="sidebar-actions">
-                        <button class="new-chat-btn" id="newChatBtn">
+                        <button class="new-chat-btn" id="newChatBtn" onclick="console.log('新对话按钮点击'); alert('创建新对话'); return false;">
                             <i class="fas fa-plus"></i> 新对话
                         </button>
-                        <button class="clear-chats-btn" id="clearChatsBtn">
+                        <button class="clear-chats-btn" id="clearChatsBtn" onclick="console.log('清空对话按钮点击'); if(confirm('确定要清空所有对话记录吗？此操作不可恢复。')) { alert('已清空所有对话'); } return false;">
                             <i class="fas fa-trash"></i> 清空
                         </button>
                     </div>
@@ -137,22 +108,22 @@
                             </div>
                             <div class="buttons-wrapper">
                                 <div class="action-buttons">
-                                    <button class="btn upload-btn" id="uploadBtn">
+                                    <button class="btn upload-btn" id="uploadBtn" onclick="console.log('图片按钮点击'); document.getElementById('imageUpload').click(); return false;">
                                         <i class="fas fa-image"></i> 图片
                                     </button>
                                     <input type="file" id="imageUpload" class="image-upload" accept="image/*">
-                                    <button class="btn primary-btn" id="translateBtn">
+                                    <button class="btn primary-btn" id="translateBtn" onclick="console.log('翻译按钮点击'); alert('翻译按钮被点击'); return false;">
                                         <i class="fas fa-language"></i> 翻译
                                     </button>
-                                    <button class="btn secondary-btn" id="polishBtn">
+                                    <button class="btn secondary-btn" id="polishBtn" onclick="console.log('润色按钮点击'); alert('润色按钮被点击'); return false;">
                                         <i class="fas fa-magic"></i> 润色
                                     </button>
                                 </div>
                                 <div class="settings-buttons">
-                                    <button class="settings-btn" id="translateSettingsBtn">
+                                    <button class="settings-btn" id="translateSettingsBtn" onclick="toggleSettingsPanel('translateSettings'); return false;">
                                         <i class="fas fa-cog"></i>
                                     </button>
-                                    <button class="settings-btn" id="polishSettingsBtn">
+                                    <button class="settings-btn" id="polishSettingsBtn" onclick="toggleSettingsPanel('polishSettings'); return false;">
                                         <i class="fas fa-sliders-h"></i>
                                     </button>
                                 </div>
@@ -165,7 +136,7 @@
                 <div class="settings-panel" id="translateSettings">
                     <h3>
                         翻译设置
-                        <button class="close-settings-btn" id="closeTranslateSettings">
+                        <button class="close-settings-btn" id="closeTranslateSettings" onclick="document.getElementById('translateSettings').classList.remove('active'); return false;">
                             <i class="fas fa-times"></i>
                         </button>
                     </h3>
@@ -229,7 +200,7 @@
                 <div class="settings-panel" id="polishSettings">
                     <h3>
                         润色设置
-                        <button class="close-settings-btn" id="closePolishSettings">
+                        <button class="close-settings-btn" id="closePolishSettings" onclick="document.getElementById('polishSettings').classList.remove('active'); return false;">
                             <i class="fas fa-times"></i>
                         </button>
                     </h3>
@@ -314,27 +285,33 @@
     <!-- 通知组件 -->
     <div class="notification" id="notification"></div>
 
-    <!-- 应用脚本 - 优化脚本加载顺序 -->
-    <!-- 0. 首先加载设置按钮处理脚本，确保设置面板正常工作 -->
-    <script src="js/settings-buttons.js"></script>
+    <!-- 应用脚本 - 按顺序加载 -->
+    <script src="js/app.js"></script>
+    <script src="js/chat.js"></script>
+    <!-- 添加紧急修复脚本 -->
+    <script src="js/buttons-fix.js"></script>
+    <!-- 添加设置面板专门修复脚本 -->
+    <script src="js/settings-fix.js"></script>
     
-    <!-- 0.5 加载图片处理模块 -->
-    <script src="js/image-handler.js"></script>
-    
-    <!-- 0.6 加载输入框自动调整模块 -->
-    <script src="js/input-auto-resize.js"></script>
-    
-    <!-- 1. 然后加载复制功能模块 -->
-    <script src="js/copy-functions.js"></script>
-    
-    <!-- 2. 然后加载增强版按钮修复脚本，确保按钮事件被正确绑定 -->
-    <script src="js/main-buttons-fix.js"></script>
-    
-    <!-- 3. 接着加载主应用脚本 -->
-    <script src="js/app.js" defer></script>
-    
-    <!-- 4. 最后加载聊天脚本 -->
-    <script src="js/chat.js" defer></script>
+    <!-- 增加内联按钮事件作为最后的备份 -->
+    <script>
+        // 页面完全加载后的最后一道保障
+        window.addEventListener('load', function() {
+            console.log('[内联脚本] 页面完全加载，尝试添加内联按钮事件');
+            
+            const translateBtn = document.getElementById('translateBtn');
+            const polishBtn = document.getElementById('polishBtn');
+            
+            // 使用内联方式添加事件
+            if (translateBtn) {
+                translateBtn.setAttribute('onclick', "console.log('[内联] 翻译按钮点击'); alert('翻译按钮被点击(内联)'); return false;");
+            }
+            
+            if (polishBtn) {
+                polishBtn.setAttribute('onclick', "console.log('[内联] 润色按钮点击'); alert('润色按钮被点击(内联)'); return false;");
+            }
+        });
+    </script>
     
     <!-- 认证初始检查脚本 -->
     <script>
@@ -359,6 +336,40 @@
                 }
             }
         });
+    </script>
+    
+    <!-- 直接的设置面板函数，确保即使其他脚本都不加载，这个函数也能用 -->
+    <script>
+        // 全局函数：切换设置面板
+        function toggleSettingsPanel(panelId) {
+            console.log('正在手动切换设置面板:', panelId);
+            
+            // 获取所有设置面板
+            var allPanels = document.querySelectorAll('.settings-panel');
+            
+            // 获取要切换的面板
+            var targetPanel = document.getElementById(panelId);
+            
+            if (!targetPanel) {
+                console.error('找不到指定的面板:', panelId);
+                return;
+            }
+            
+            // 如果目标面板当前是显示状态，则隐藏
+            if (targetPanel.classList.contains('active')) {
+                targetPanel.classList.remove('active');
+            }
+            // 否则显示目标面板，隐藏其他面板
+            else {
+                // 先隐藏所有面板
+                allPanels.forEach(function(panel) {
+                    panel.classList.remove('active');
+                });
+                
+                // 然后显示目标面板
+                targetPanel.classList.add('active');
+            }
+        }
     </script>
 </body>
 </html>

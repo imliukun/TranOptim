@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TranOptim - 调试页面</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        #error-log { 
+            border: 1px solid #ccc; 
+            padding: 10px; 
+            margin-top: 10px; 
+            height: 400px; 
+            overflow-y: auto; 
+            background-color: #f5f5f5; 
+        }
+        .error { color: red; }
+        .warning { color: orange; }
+        .info { color: blue; }
+    </style>
+</head>
+<body>
+    <h1>TranOptim - JavaScript错误调试页面</h1>
+    <button id="clearBtn">清空日志</button>
+    <button id="reloadBtn">刷新页面</button>
+    <div id="error-log"></div>
+
+    <script>
+        // 获取DOM元素
+        const errorLog = document.getElementById('error-log');
+        const clearBtn = document.getElementById('clearBtn');
+        const reloadBtn = document.getElementById('reloadBtn');
+        
+        // 清空日志
+        clearBtn.addEventListener('click', function() {
+            errorLog.innerHTML = '';
+        });
+        
+        // 刷新页面
+        reloadBtn.addEventListener('click', function() {
+            window.location.reload();
+        });
+        
+        // 捕获全局错误
+        window.onerror = function(message, source, lineno, colno, error) {
+            const errorMsg = `<div class="error">${new Date().toLocaleTimeString()} - 错误: ${message}<br>出错位置: ${source}:${lineno}:${colno}</div>`;
+            errorLog.innerHTML += errorMsg;
+            return false;
+        };
+        
+        // 捕获未处理的Promise错误
+        window.addEventListener('unhandledrejection', function(event) {
+            const errorMsg = `<div class="error">${new Date().toLocaleTimeString()} - 未处理的Promise错误: ${event.reason}</div>`;
+            errorLog.innerHTML += errorMsg;
+        });
+        
+        // 打开iframe加载主页
+        const iframe = document.createElement('iframe');
+        iframe.style.display = 'none';
+        iframe.src = 'http://localhost:3001/';
+        document.body.appendChild(iframe);
+        
+        iframe.onload = function() {
+            try {
+                // 尝试获取iframe中的控制台日志
+                if (iframe.contentWindow && iframe.contentWindow.console) {
+                    const originalConsoleLog = iframe.contentWindow.console.log;
+                    const originalConsoleError = iframe.contentWindow.console.error;
+                    const originalConsoleWarn = iframe.contentWindow.console.warn;
+                    
+                    iframe.contentWindow.console.log = function() {
+                        originalConsoleLog.apply(this, arguments);
+                        const args = Array.from(arguments).join(' ');
+                        const logMsg = `<div class="info">${new Date().toLocaleTimeString()} - Log: ${args}</div>`;
+                        errorLog.innerHTML += logMsg;
+                    };
+                    
+                    iframe.contentWindow.console.error = function() {
+                        originalConsoleError.apply(this, arguments);
+                        const args = Array.from(arguments).join(' ');
+                        const errorMsg = `<div class="error">${new Date().toLocaleTimeString()} - Error: ${args}</div>`;
+                        errorLog.innerHTML += errorMsg;
+                    };
+                    
+                    iframe.contentWindow.console.warn = function() {
+                        originalConsoleWarn.apply(this, arguments);
+                        const args = Array.from(arguments).join(' ');
+                        const warnMsg = `<div class="warning">${new Date().toLocaleTimeString()} - Warning: ${args}</div>`;
+                        errorLog.innerHTML += warnMsg;
+                    };
+                }
+            } catch (e) {
+                const errorMsg = `<div class="error">${new Date().toLocaleTimeString()} - 无法拦截iframe控制台: ${e.message}</div>`;
+                errorLog.innerHTML += errorMsg;
+            }
+            
+            errorLog.innerHTML += `<div class="info">${new Date().toLocaleTimeString()} - iframe加载完成</div>`;
+        };
+        
+        // 添加一条初始日志
+        errorLog.innerHTML = `<div class="info">${new Date().toLocaleTimeString()} - 调试页面已加载，等待iframe加载主页...</div>`;
+    </script>
+</body>
+</html> 

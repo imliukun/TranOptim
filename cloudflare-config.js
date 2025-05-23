@@ -1,10 +1,10 @@
 // TranOptim Cloudflare配置
 const CloudflareConfig = {
-    // 是否启用Cloudflare部署模式
-    isCloudflare: true,
+    // 是否启用Cloudflare部署模式 - 本地开发时设为false
+    isCloudflare: false,
     
     // Cloudflare Pages URL，部署后修改为实际地址
-    cloudflareUrl: 'https://tranoptim.pages.dev',
+    cloudflareUrl: 'http://localhost:3001',
     
     // API路径
     apiPaths: {

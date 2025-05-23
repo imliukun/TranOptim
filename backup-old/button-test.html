@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>按钮测试</title>
+    <style>
+        body { font-family: Arial; padding: 20px; }
+        button { padding: 10px 20px; margin: 10px; cursor: pointer; }
+        .result { margin-top: 20px; padding: 10px; border: 1px solid #ccc; min-height: 50px; }
+    </style>
+</head>
+<body>
+    <h1>按钮点击测试</h1>
+    
+    <button id="testBtn1">测试按钮1 (内联事件)</button>
+    <button id="testBtn2">测试按钮2 (addEventListener)</button>
+    <button id="testBtn3">测试按钮3 (onclick属性)</button>
+    
+    <div class="result" id="result">结果显示区域</div>
+    
+    <script>
+        // 记录页面加载状态
+        document.getElementById('result').innerHTML = '页面已加载 - ' + new Date().toLocaleTimeString();
+        
+        // 方法1: 内联事件
+        document.getElementById('testBtn1').onclick = function() {
+            document.getElementById('result').innerHTML = '按钮1被点击 - ' + new Date().toLocaleTimeString();
+            console.log('按钮1被点击');
+            alert('按钮1被点击');
+        };
+        
+        // 方法2: addEventListener
+        document.getElementById('testBtn2').addEventListener('click', function() {
+            document.getElementById('result').innerHTML = '按钮2被点击 - ' + new Date().toLocaleTimeString();
+            console.log('按钮2被点击');
+            alert('按钮2被点击');
+        });
+        
+        // 方法3: 属性赋值
+        document.getElementById('testBtn3').onclick = function() {
+            document.getElementById('result').innerHTML = '按钮3被点击 - ' + new Date().toLocaleTimeString();
+            console.log('按钮3被点击');
+            alert('按钮3被点击');
+        };
+        
+        // 输出调试信息
+        console.log('所有按钮事件已绑定完成');
+    </script>
+</body>
+</html> 

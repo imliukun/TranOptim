@@ -1,8 +1,107 @@
 // TranOptim - 智能翻译与润色工具 聊天界面 JavaScript
+console.log('[DEBUG] TranOptim chat.js script started loading!');
+
+// 添加一个直接的按钮事件绑定函数，确保在DOMContentLoaded之前就开始监听
+function bindButtonEvents() {
+    console.log('[DIRECT] 尝试直接绑定重要按钮事件');
+    
+    // 直接添加点击事件到document，使用事件委托
+    document.addEventListener('click', function(e) {
+        let targetBtn = null;
+        
+        // 检查是否点击了翻译按钮或其子元素
+        if (e.target.id === 'translateBtn' || e.target.closest('#translateBtn')) {
+            targetBtn = 'translate';
+        }
+        // 检查是否点击了润色按钮或其子元素
+        else if (e.target.id === 'polishBtn' || e.target.closest('#polishBtn')) {
+            targetBtn = 'polish';
+        }
+        
+        if (targetBtn) {
+            console.log(`[DIRECT] 捕获到${targetBtn}按钮点击事件`);
+            e.stopPropagation(); // 阻止事件冒泡
+            e.preventDefault(); // 阻止默认行为
+            
+            try {
+                if (targetBtn === 'translate') {
+                    // 检查handleTranslate函数是否存在
+                    if (typeof window.handleTranslate === 'function') {
+                        window.handleTranslate();
+                    } else if (typeof handleTranslate === 'function') {
+                        handleTranslate();
+                    } else {
+                        alert('翻译功能尚未完成加载，请稍后再试');
+                    }
+                } else if (targetBtn === 'polish') {
+                    // 检查handlePolish函数是否存在
+                    if (typeof window.handlePolish === 'function') {
+                        window.handlePolish();
+                    } else if (typeof handlePolish === 'function') {
+                        handlePolish();
+                    } else {
+                        alert('润色功能尚未完成加载，请稍后再试');
+                    }
+                }
+            } catch (error) {
+                console.error(`[DIRECT] 执行${targetBtn}功能时出错:`, error);
+                alert(`执行${targetBtn === 'translate' ? '翻译' : '润色'}功能时出错，请刷新页面重试`);
+            }
+        }
+    });
+}
+
+// 立即绑定按钮事件，不等待DOMContentLoaded
+bindButtonEvents();
+
+// 添加一个不等待DOMContentLoaded的事件绑定
+// 这是为了确保即使DOM操作出错，按钮事件也能正常工作
+(function() {
+    console.log('[PRIORITY] 设置优先级高的事件委托处理...');
+    
+    // 使用捕获阶段的事件处理，确保最早被触发
+    document.addEventListener('click', function(e) {
+        // 只在页面完全加载后执行实际操作
+        if (document.readyState === 'complete') {
+            // 检查按钮ID
+            if (e.target && (
+                e.target.id === 'translateBtn' || 
+                e.target.closest('#translateBtn') ||
+                e.target.id === 'polishBtn' || 
+                e.target.closest('#polishBtn')
+            )) {
+                console.log('[PRIORITY EVENT] 捕获到按钮点击:', 
+                            e.target.id || (e.target.closest('button') ? e.target.closest('button').id : '未知按钮'));
+                
+                // 阻止冒泡避免重复处理
+                e.stopPropagation();
+                
+                // 为不同按钮触发不同操作
+                if (e.target.id === 'translateBtn' || e.target.closest('#translateBtn')) {
+                    console.log('[PRIORITY] 触发翻译操作');
+                    // 这里仅输出消息，实际功能由window.handleTranslate处理
+                    if (typeof window.handleTranslate === 'function') {
+                        window.handleTranslate();
+                    } else {
+                        alert('翻译功能尚未完全加载，请稍后再试');
+                    }
+                } else if (e.target.id === 'polishBtn' || e.target.closest('#polishBtn')) {
+                    console.log('[PRIORITY] 触发润色操作');
+                    // 这里仅输出消息，实际功能由window.handlePolish处理
+                    if (typeof window.handlePolish === 'function') {
+                        window.handlePolish();
+                    } else {
+                        alert('润色功能尚未完全加载，请稍后再试');
+                    }
+                }
+            }
+        }
+    }, true); // 使用捕获阶段
+})();
 
 document.addEventListener('DOMContentLoaded', function() {
     // 记录初始化开始
-    console.log('初始化聊天界面...');
+    console.log('[DEBUG] DOMContentLoaded event fired in chat.js. Initializing chat interface...');
     
     // 获取DOM元素
     const chatMessages = document.getElementById('chatMessages');
@@ -43,8 +142,6 @@ document.addEventListener('DOMContentLoaded', function() {
     function autoResizeInput() {
         if (!chatInput) return;
         
-        console.log('调整输入框高度');
-        
         // 保存当前滚动位置
         const scrollTop = chatInput.scrollTop;
         
@@ -54,9 +151,7 @@ document.addEventListener('DOMContentLoaded', function() {
         // 计算新高度 (取内容高度和最小高度中的较大值，但不超过最大高度)
         const minHeight = 40; // 最小高度设为40px
         const scrollHeight = chatInput.scrollHeight;
-        const maxHeight = 200; // 最大高度
-        
-        console.log('输入框滚动高度:', scrollHeight);
+        const maxHeight = 200; // 最大高度设为200px
         
         // 设置高度
         const newHeight = Math.max(minHeight, Math.min(scrollHeight, maxHeight));
@@ -70,8 +165,6 @@ document.addEventListener('DOMContentLoaded', function() {
         } else {
             chatInput.style.overflowY = 'hidden';
         }
-        
-        console.log('新输入框高度:', newHeight, 'px');
     }
     
     // 在输入框内容变化时触发高度调整
@@ -345,252 +438,156 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
     
-    // 翻译按钮功能 - 修改以支持OCR和图片处理
-    translateBtn.addEventListener('click', async () => {
-        try {
-            const inputText = chatInput.value.trim();
-            const hasImage = currentImageFile !== null;
+    // 修复按钮引用和事件绑定
+    console.log('[BUTTONS] 开始重新绑定所有按钮事件');
+    
+    // 重新获取所有按钮元素引用
+    const refreshButtonReferences = function() {
+        // 检查并获取翻译按钮
+        if (translateBtn) {
+            console.log('[BUTTONS] 当前翻译按钮对象:', translateBtn);
+            const tempTranslateBtn = document.getElementById('translateBtn');
             
-            // 检查是否有输入
-            if (!inputText && !hasImage) {
-                showNotification('请输入文本或上传图片');
-                return;
+            if (tempTranslateBtn) {
+                console.log('[BUTTONS] 成功找到翻译按钮元素');
+                translateBtn = tempTranslateBtn;
+            } else {
+                console.error('[BUTTONS] 找不到翻译按钮元素!');
             }
+        } else {
+            console.log('[BUTTONS] 重新获取翻译按钮引用');
+            translateBtn = document.getElementById('translateBtn');
+        }
+        
+        // 检查并获取润色按钮
+        if (polishBtn) {
+            console.log('[BUTTONS] 当前润色按钮对象:', polishBtn);
+            const tempPolishBtn = document.getElementById('polishBtn');
             
-            // 关闭所有打开的设置面板
-            closeAllSettingsPanels();
-            
-            // 获取选中的服务
-            const selectedService = document.querySelector('input[name="translate-service"]:checked').value;
-            
-            // 获取源语言和目标语言
-            const fromLang = sourceLang.value;
-            const toLang = targetLang.value;
-            
-            // 添加用户消息到聊天区域
-            addUserMessage(inputText, hasImage ? currentImageFile : null);
-            
-            // 先添加一个带加载状态的AI消息占位
-            const loadingMessageId = addLoadingMessage();
-            
-            // 清空输入框和图片
-            chatInput.value = '';
-            const savedImageFile = currentImageFile;
-            currentImageFile = null;
-            
-            // 隐藏图片预览
-            imagePreviewContainer.style.display = 'none';
-            
+            if (tempPolishBtn) {
+                console.log('[BUTTONS] 成功找到润色按钮元素');
+                polishBtn = tempPolishBtn;
+            } else {
+                console.error('[BUTTONS] 找不到润色按钮元素!');
+            }
+        } else {
+            console.log('[BUTTONS] 重新获取润色按钮引用');
+            polishBtn = document.getElementById('polishBtn');
+        }
+        
+        // 输出按钮状态
+        console.log('[BUTTONS] 按钮引用状态:', {
+            translateBtn: !!translateBtn,
+            polishBtn: !!polishBtn
+        });
+    };
+    
+    // 首先刷新按钮引用
+    refreshButtonReferences();
+    
+    // 提取翻译功能到一个独立函数
+    async function handleTranslate() {
+        console.log('[FUNCTION] 执行翻译功能');
+        const inputText = chatInput.value.trim();
+        const hasImage = currentImageFile !== null;
+        
+        // 检查是否有输入
+        if (!inputText && !hasImage) {
+            showNotification('请输入文本或上传图片');
+            return;
+        }
+        
+        // 关闭所有打开的设置面板
+        closeAllSettingsPanels();
+        
+        // 获取选中的服务
+        const selectedService = document.querySelector('input[name="translate-service"]:checked').value;
+        
+        // 获取源语言和目标语言
+        const fromLang = sourceLang.value;
+        const toLang = targetLang.value;
+        
+        // 获取自定义提示词
+        const customPrompt = ""; // 页面无自定义提示词输入框，留空
+        
+        // 添加用户消息到聊天区域
+        addUserMessage(inputText, hasImage ? currentImageFile : null);
+        
+        // 先添加一个带加载状态的AI消息占位
+        const loadingMessageId = addLoadingMessage();
+        
+        // 清空输入框和图片
+        chatInput.value = '';
+        const savedImageFile = currentImageFile;
+        currentImageFile = null;
+        
+        // 隐藏图片预览
+        imagePreviewContainer.style.display = 'none';
+        
+        try {
             let result;
             
             if (hasImage) {
-                // 使用图片翻译API
-                result = await translateImage(savedImageFile, selectedService, toLang);
-            } else {
-                // 使用文本翻译API
-                result = await translateText(inputText, selectedService, fromLang, toLang);
-            }
-            
-            // 移除加载消息
-            removeLoadingMessage(loadingMessageId);
-            
-            // 显示翻译结果
-            if (result.success) {
-                addAITranslationMessage(result);
-            } else {
-                addErrorMessage(result.error || '翻译失败，请稍后重试');
-            }
-            
-            hideLoadingOverlay();
-        } catch (error) {
-            console.error('翻译过程出错:', error);
-            hideLoadingOverlay();
-            
-            // 移除加载消息
-            if (loadingMessageId) {
-                removeLoadingMessage(loadingMessageId);
-            }
-            
-            // 添加错误消息
-            addErrorMessage(error.message || '翻译失败，请稍后重试');
-        }
-    });
-    
-    // 文本翻译函数
-    async function translateText(text, service, fromLang, toLang) {
-        console.log('发起文本翻译请求:', { text: text.substring(0, 50) + (text.length > 50 ? '...' : ''), service, fromLang, toLang });
-        
-        try {
-            // 检查CloudflareConfig是否存在
-            const apiPath = window.CloudflareConfig && typeof window.CloudflareConfig.getApiUrl === 'function' 
-                ? window.CloudflareConfig.getApiUrl('/api/translate/text')
-                : '/api/translate/text';
+                // 显示加载覆盖层
+                showLoadingOverlay('正在处理图片，请稍候...');
                 
-            // 构建请求体
-            const requestBody = {
-                text: text,
-                sourceLang: fromLang,
-                targetLang: toLang,
-                service: service
-            };
-            
-            // 发送请求
-            const response = await fetch(apiPath, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify(requestBody)
-            });
-            
-            if (!response.ok) {
-                const errorData = await response.json();
-                throw new Error(errorData.error || '文本翻译请求失败');
-            }
-            
-            const data = await response.json();
-            
-            // 确保data.result存在
-            if (!data || !data.result) {
-                throw new Error('服务器返回空结果，请重试');
-            }
-            
-            console.log('翻译请求成功:', data);
-            
-            // 添加success字段，便于区分成功和失败
-            data.result.success = true;
-            return data.result;
-        } catch (error) {
-            console.error('文本翻译错误:', error);
-            return {
-                success: false,
-                error: error.message,
-                translatedText: '翻译失败: ' + error.message,
-                service: service,
-                fromLang: fromLang,
-                toLang: toLang
-            };
-        }
-    }
-    
-    // 图片翻译函数
-    async function translateImage(imageFile, service, targetLang) {
-        console.log('发起图片翻译请求:', { fileName: imageFile.name, service, targetLang });
-        
-        try {
-            // 检查CloudflareConfig是否存在
-            const apiPath = window.CloudflareConfig && typeof window.CloudflareConfig.getApiUrl === 'function' 
-                ? window.CloudflareConfig.getApiUrl('/api/translate/image')
-                : '/api/translate/image';
+                // 图片翻译 - 创建FormData对象
+                const formData = new FormData();
+                formData.append('image', savedImageFile);
+                formData.append('sourceLang', fromLang);
+                formData.append('targetLang', toLang);
+                formData.append('service', selectedService);
                 
-            // 创建FormData
-            const formData = new FormData();
-            formData.append('image', imageFile);
-            formData.append('targetLang', targetLang);
-            formData.append('service', service);
-            
-            // 发送请求
-            const response = await fetch(apiPath, {
-                method: 'POST',
-                body: formData
-            });
-            
-            if (!response.ok) {
-                const errorData = await response.json();
-                throw new Error(errorData.error || '图片翻译请求失败');
-            }
-            
-            const data = await response.json();
-            
-            // 确保data.result存在
-            if (!data || !data.result) {
-                throw new Error('服务器返回空结果，请重试');
-            }
-            
-            console.log('图片翻译请求成功:', data);
-            
-            // 添加success字段，便于区分成功和失败
-            data.result.success = true;
-            return data.result;
-        } catch (error) {
-            console.error('图片翻译错误:', error);
-            return {
-                success: false,
-                error: error.message,
-                translatedText: '图片翻译失败: ' + error.message,
-                service: service,
-                toLang: targetLang
-            };
-        }
-    }
-    
-    // 润色按钮功能 - 完全重写以解决事件绑定问题
-    if (polishBtn) {
-        console.log('重新绑定润色按钮事件', polishBtn);
-        
-        // 移除所有现有的事件监听器（如果可能的话）
-        const newPolishBtn = polishBtn.cloneNode(true);
-        polishBtn.parentNode.replaceChild(newPolishBtn, polishBtn);
-        
-        // 重新获取元素引用
-        const polishBtnUpdated = document.getElementById('polishBtn');
-        
-        // 添加内联事件处理程序，确保点击能被捕获
-        polishBtnUpdated.onclick = async function(event) {
-            console.log('润色按钮被点击', new Date().toISOString());
-            
-            // 添加视觉反馈
-            this.classList.add('button-clicked');
-            setTimeout(() => this.classList.remove('button-clicked'), 200);
-            
-            const inputText = chatInput.value.trim();
-            
-            // 检查是否有输入
-            if (!inputText) {
-                showNotification('请输入需要润色的文本');
-                return;
-            }
-            
-            // 关闭所有打开的设置面板
-            closeAllSettingsPanels();
-            
-            // 获取选中的服务
-            const selectedService = document.querySelector('input[name="polish-service"]:checked')?.value || 'gpt';
-            console.log('润色服务:', selectedService);
-            
-            // 添加用户消息到聊天区域
-            addUserMessage(inputText);
-            
-            // 先添加一个带加载状态的AI消息占位
-            const loadingMessageId = addLoadingMessage();
-            
-            // 显示加载覆盖层
-            showLoadingOverlay('正在润色文本，请稍候...');
-            
-            // 清空输入框
-            chatInput.value = '';
-            
-            try {
-                // 使用CloudflareConfig检查
-                const apiPath = window.CloudflareConfig && typeof window.CloudflareConfig.getApiUrl === 'function' 
-                    ? window.CloudflareConfig.getApiUrl('/api/polish/text')
-                    : '/api/polish/text';
+                // 添加自定义提示词
+                if (customPrompt) {
+                    formData.append('customPrompt', customPrompt);
+                }
                 
-                // 构建请求体
-                const requestBody = {
-                    text: inputText,
-                    service: selectedService,
-                    multiStyle: true  // 新参数，表示需要多种风格结果
-                };
-                
-                console.log('发送润色请求:', {
-                    url: apiPath,
-                    service: selectedService,
-                    multiStyle: true
+                // 发送请求到后端API
+                const response = await fetch('/api/translate/image', {
+                    method: 'POST',
+                    body: formData
                 });
                 
-                // 使用fetch API发送请求
-                const response = await fetch(apiPath, {
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.error || '图片翻译请求失败');
+                }
+                
+                const data = await response.json();
+                
+                // 确保 data.result 存在
+                if (!data || !data.result) {
+                    throw new Error('服务器返回空结果，请重试');
+                }
+                
+                result = data.result;
+                
+                // 重置文件输入控件，允许重新选择相同的文件
+                imageUpload.value = '';
+            } else {
+                // 显示加载覆盖层
+                showLoadingOverlay('正在翻译文本，请稍候...');
+                
+                // 文本翻译 - 发送请求到后端API
+                const requestBody = {
+                    text: inputText,
+                    sourceLang: fromLang,
+                    targetLang: toLang,
+                    service: selectedService
+                };
+                
+                // 添加自定义提示词
+                if (customPrompt) {
+                    requestBody.customPrompt = customPrompt;
+                }
+                
+                console.log('[API] 发送翻译请求:', {
+                    url: '/api/translate/text',
+                    body: requestBody
+                });
+                
+                const response = await fetch('/api/translate/text', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json'
@@ -598,56 +595,163 @@ document.addEventListener('DOMContentLoaded', function() {
                     body: JSON.stringify(requestBody)
                 });
                 
+                console.log('[API] 翻译响应状态:', response.status);
+                
                 if (!response.ok) {
                     const errorData = await response.json();
-                    throw new Error(errorData.error || '润色请求失败');
+                    throw new Error(errorData.error || '文本翻译请求失败');
                 }
                 
                 const data = await response.json();
-                console.log('润色响应数据:', data);
+                console.log('[API] 翻译响应数据:', data);
                 
+                // 确保 data.result 存在
                 if (!data || !data.result) {
-                    throw new Error('服务器返回数据结构无效');
+                    throw new Error('服务器返回空结果，请重试');
                 }
                 
-                // 隐藏加载覆盖层
-                hideLoadingOverlay();
-                
-                // 移除加载消息
-                removeLoadingMessage(loadingMessageId);
-                
-                // 添加新格式的润色结果到聊天区域
-                addMultiStylePolishMessage(data.result);
-                
-                // 显示成功通知
-                showNotification('润色完成');
-                
-                // 滚动到最新消息
-                scrollToBottom();
-                
-            } catch (error) {
-                console.error('润色过程中出错:', error);
-                
-                // 隐藏加载覆盖层
-                hideLoadingOverlay();
-                
-                // 移除加载消息
-                removeLoadingMessage(loadingMessageId);
-                
-                // 添加错误消息
-                addErrorMessage('润色失败: ' + error.message);
-                
-                // 显示错误通知
-                showNotification('润色失败: ' + error.message);
-                
-                // 滚动到底部
-                scrollToBottom();
+                result = data.result;
             }
-        };
+            
+            // 移除加载消息
+            removeLoadingMessage(loadingMessageId);
+            
+            // 添加翻译结果消息
+            addAITranslationMessage(result);
+            
+            // 隐藏加载覆盖层
+            hideLoadingOverlay();
+            
+            // 滚动到底部
+            scrollToBottom();
+        } catch (error) {
+            console.error('翻译错误:', error);
+            
+            // 隐藏加载覆盖层
+            hideLoadingOverlay();
+            
+            // 移除加载消息
+            removeLoadingMessage(loadingMessageId);
+            
+            // 添加错误消息
+            addErrorMessage(error.message || '翻译失败，请稍后再试');
+            
+            // 滚动到底部
+            scrollToBottom();
+        }
+    }
+    
+    // 提取润色功能到一个独立函数
+    async function handlePolish() {
+        console.log('[FUNCTION] 执行润色功能');
+        const inputText = chatInput.value.trim();
+        console.log('输入文本:', inputText ? `"${inputText.substring(0, 30)}${inputText.length > 30 ? '...' : ''}"` : '空');
         
-        console.log('润色按钮事件已重新绑定');
-    } else {
-        console.error('未找到润色按钮元素');
+        // 检查是否有输入
+        if (!inputText) {
+            console.log('没有输入文本，退出润色处理');
+            showNotification('请输入需要润色的文本');
+            return;
+        }
+        
+        // 关闭所有打开的设置面板
+        closeAllSettingsPanels();
+        
+        // 获取选中的服务
+        const selectedService = document.querySelector('input[name="polish-service"]:checked');
+        if (!selectedService) {
+            console.error('未找到选中的润色服务选项');
+            showNotification('服务选择错误，请重试');
+            return;
+        }
+        
+        const serviceName = selectedService.value;
+        console.log('选中的润色服务:', serviceName);
+        
+        // 固定使用两种风格: normal(常规优化)和rephrase(转换语言风格)
+        console.log('使用固定的两种润色风格: normal和rephrase');
+        
+        // 添加用户消息到聊天区域
+        addUserMessage(inputText);
+        console.log('已添加用户消息到聊天区域');
+        
+        // 先添加一个带加载状态的AI消息占位
+        const loadingMessageId = addLoadingMessage();
+        console.log('已添加加载消息, ID:', loadingMessageId);
+        
+        // 显示加载覆盖层
+        showLoadingOverlay('正在润色文本，请稍候...');
+        console.log('显示加载覆盖层');
+        
+        // 清空输入框
+        chatInput.value = '';
+        
+        try {
+            // 构建请求体 - 不再指定style参数
+            const requestBody = {
+                text: inputText,
+                service: serviceName,
+                multiStyle: true  // 新参数，表示需要多种风格结果
+            };
+            
+            console.log('[API] 发送润色请求:', {
+                url: '/api/polish/text',
+                body: requestBody
+            });
+            
+            // 发送请求到后端API
+            const response = await fetch('/api/polish/text', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(requestBody)
+            });
+            
+            console.log('[API] 润色响应状态:', response.status);
+            
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.error || '润色请求失败');
+            }
+            
+            const data = await response.json();
+            console.log('[API] 润色响应数据:', data);
+            
+            // 隐藏加载覆盖层
+            hideLoadingOverlay();
+            
+            // 移除加载消息
+            removeLoadingMessage(loadingMessageId);
+            
+            // 检查响应
+            if (!data || !data.result) {
+                throw new Error('服务器返回空结果，请重试');
+            }
+            
+            // 添加润色结果消息
+            addMultiStylePolishMessage(data.result);
+            
+            // 显示成功通知
+            showNotification('润色完成');
+            
+            // 滚动到底部
+            scrollToBottom();
+        } catch (error) {
+            console.error('润色错误:', error);
+            
+            // 隐藏加载覆盖层
+            hideLoadingOverlay();
+            
+            // 移除加载消息
+            removeLoadingMessage(loadingMessageId);
+            
+            // 添加错误消息
+            addErrorMessage(error.message || '润色失败，请稍后再试');
+            
+            // 滚动到底部
+            scrollToBottom();
+        }
     }
     
     // 添加加载中消息
@@ -774,7 +878,7 @@ document.addEventListener('DOMContentLoaded', function() {
         scrollToBottom();
     }
     
-    // 修改AI翻译消息的显示，支持OCR结果
+    // 添加AI翻译消息的显示，支持OCR结果
     function addAITranslationMessage(result, saveToHistory = true) {
         // 检查result是否为undefined或null
         if (!result) {
@@ -863,14 +967,11 @@ document.addEventListener('DOMContentLoaded', function() {
         copyButton.className = 'action-btn copy-btn';
         copyButton.innerHTML = '<i class="fas fa-clipboard"></i> 复制';
         copyButton.addEventListener('click', function() {
-            console.log('复制按钮点击 - 仅复制翻译结果');
-            console.log('翻译结果:', result.translatedText);
             // 只复制翻译结果
             if (navigator.clipboard && window.isSecureContext) {
                 // 使用现代Clipboard API
                 navigator.clipboard.writeText(result.translatedText)
                     .then(() => {
-                        console.log('使用Clipboard API复制成功');
                         showNotification('已复制到剪贴板', this);
                     })
                     .catch(err => {
@@ -1060,8 +1161,10 @@ document.addEventListener('DOMContentLoaded', function() {
         createNewConversation();
         
         // 确保新对话时保留选定的翻译和润色模型
-        document.querySelector(`input[name="translate-service"][value="${currentTranslateService}"]`)?.checked = true;
-        document.querySelector(`input[name="polish-service"][value="${currentPolishService}"]`)?.checked = true;
+        const translateInput = document.querySelector(`input[name="translate-service"][value="${currentTranslateService}"]`);
+        if (translateInput) translateInput.checked = true;
+        const polishInput = document.querySelector(`input[name="polish-service"][value="${currentPolishService}"]`);
+        if (polishInput) polishInput.checked = true;
         
         // 保存设置到localStorage
         localStorage.setItem('lastTranslateService', currentTranslateService);
@@ -1118,6 +1221,7 @@ document.addEventListener('DOMContentLoaded', function() {
             // 使用全局通知
             if (!notification) return;
             
+            // 直接设置notification元素的文本内容，而不使用notificationMessage对象
             notification.textContent = message;
             notification.classList.add('show');
             
@@ -1242,36 +1346,303 @@ document.addEventListener('DOMContentLoaded', function() {
                     const messageHTML = `
                         <div id="${messageId}" class="message user">
                             <div class="message-content">
-                                ${msg.content}
+                                <p>${msg.content}</p>
                             </div>
                         </div>
                     `;
                     chatMessages.insertAdjacentHTML('beforeend', messageHTML);
-                } else {
-                    const messageId = 'msg-' + (++messageCounter);
-                    const messageHTML = `
-                        <div id="${messageId}" class="message ai">
-                            <div class="message-content">
-                                ${msg.translationResult.translatedText}
-                            </div>
-                        </div>
-                    `;
-                    chatMessages.insertAdjacentHTML('beforeend', messageHTML);
+                    
+                    // 如果有图片，添加图片
+                    if (msg.hasImage && msg.imageData) {
+                        const imgElement = document.createElement('img');
+                        imgElement.src = msg.imageData;
+                        imgElement.alt = '上传的图片';
+                        imgElement.className = 'message-image';
+                        document.getElementById(messageId).querySelector('.message-content').prepend(imgElement);
+                    }
+                } else if (msg.type === 'ai') {
+                    // 修复历史会话中的翻译和润色结果显示
+                    if (msg.translationResult) {
+                        addAITranslationMessage(msg.translationResult, false);
+                    } else if (msg.polishResult) {
+                        if (typeof msg.polishResult === 'object') {
+                            addAIPolishMessage(msg.polishResult, false);
+                        } else {
+                            console.error('无效的润色结果格式:', msg);
+                        }
+                    } else if (msg.content) {
+                        // 兼容旧格式的数据
+                        addAITranslationMessage({
+                            translatedText: msg.content,
+                            service: msg.service || 'unknown',
+                            error: msg.error
+                        }, false);
+                    }
                 }
             });
         }
+        
+        // 更新UI，高亮当前对话
+        document.querySelectorAll('.conversation-item').forEach(item => {
+            item.classList.remove('active');
+            if (item.dataset.id === conversationId) {
+                item.classList.add('active');
+            }
+        });
         
         // 滚动到底部
         scrollToBottom();
     }
     
+    // 保存消息到当前对话
+    function saveMessageToCurrentConversation(message) {
+        if (!currentConversationId) return;
+        
+        // 查找当前对话
+        const conversationIndex = conversations.findIndex(conv => conv.id === currentConversationId);
+        if (conversationIndex === -1) return;
+        
+        // 添加消息
+        conversations[conversationIndex].messages.push(message);
+        
+        // 更新对话的最后修改时间
+        conversations[conversationIndex].updatedAt = new Date().toISOString();
+        
+        // 如果是第一条用户消息，更新对话标题
+        if (message.type === 'user' && conversations[conversationIndex].messages.length === 1) {
+            // 使用用户消息的前20个字符作为标题
+            let title = message.content.replace(/\[图片已上传\]\s*/g, '').trim();
+            if (title.length > 20) {
+                title = title.substring(0, 20) + '...';
+            }
+            if (!title && message.hasImage) {
+                title = '[图片对话]';
+            }
+            if (title) {
+                conversations[conversationIndex].title = title;
+            }
+        }
+        
+        // 保存到本地存储
+        saveConversationsToStorage();
+        
+        // 更新UI
+        renderConversationList();
+    }
+    
+    // 删除对话
+    function deleteConversation(conversationId) {
+        // 查找对话索引
+        const conversationIndex = conversations.findIndex(conv => conv.id === conversationId);
+        if (conversationIndex === -1) return;
+        
+        // 删除对话
+        conversations.splice(conversationIndex, 1);
+        
+        // 保存到本地存储
+        saveConversationsToStorage();
+        
+        // 如果删除的是当前对话，加载另一个对话或创建新对话
+        if (conversationId === currentConversationId) {
+            if (conversations.length > 0) {
+                loadConversation(conversations[0].id);
+            } else {
+                createNewConversation();
+            }
+        }
+        
+        // 更新UI
+        renderConversationList();
+        
+        // 显示通知
+        showNotification('对话已删除');
+    }
+    
     // 渲染对话列表
     function renderConversationList() {
         conversationList.innerHTML = '';
-        conversations.forEach(conv => {
-            const li = document.createElement('li');
-            li.textContent = conv.title;
-            conversationList.appendChild(li);
+        
+        conversations.forEach(conversation => {
+            // 计算对话更新时间的相对表示
+            const updatedTime = new Date(conversation.updatedAt);
+            const now = new Date();
+            const diffMs = now - updatedTime;
+            const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+            const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+            const diffMinutes = Math.floor(diffMs / (1000 * 60));
+            
+            let timeString = '';
+            if (diffDays > 0) {
+                timeString = `${diffDays}天前`;
+            } else if (diffHours > 0) {
+                timeString = `${diffHours}小时前`;
+            } else if (diffMinutes > 0) {
+                timeString = `${diffMinutes}分钟前`;
+            } else {
+                timeString = '刚刚';
+            }
+            
+            const conversationHTML = `
+                <div class="conversation-item ${conversation.id === currentConversationId ? 'active' : ''}" data-id="${conversation.id}">
+                    <div class="conversation-title">${conversation.title}</div>
+                    <div class="conversation-actions">
+                        <button class="conversation-action-btn delete-conversation-btn" data-id="${conversation.id}" title="删除对话">
+                            <i class="bi bi-trash"></i>
+                        </button>
+                    </div>
+                </div>
+            `;
+            
+            conversationList.insertAdjacentHTML('beforeend', conversationHTML);
+        });
+        
+        // 添加点击事件
+        document.querySelectorAll('.conversation-item').forEach(item => {
+            item.addEventListener('click', function(e) {
+                // 忽略删除按钮的点击
+                if (e.target.closest('.delete-conversation-btn')) return;
+                
+                const conversationId = this.dataset.id;
+                loadConversation(conversationId);
+            });
+        });
+        
+        // 添加删除按钮事件
+        document.querySelectorAll('.delete-conversation-btn').forEach(btn => {
+            btn.addEventListener('click', function(e) {
+                e.stopPropagation(); // 阻止事件冒泡
+                const conversationId = this.dataset.id;
+                if (confirm('确定要删除这个对话吗？')) {
+                    deleteConversation(conversationId);
+                }
+            });
         });
     }
+    
+    // 输入历史记录管理
+    // 删除这里的变量定义，已移至文件顶部
+    // let inputHistory = [];
+    // let inputHistoryIndex = -1;
+    
+    // 添加到输入记忆
+    function addToInputHistory(text) {
+        if (!text || text.trim() === '') return;
+        
+        // 避免重复添加相同的输入
+        if (inputHistory.length === 0 || inputHistory[0] !== text) {
+            inputHistory.unshift(text);
+            if (inputHistory.length > 50) { // 限制历史记录数量
+                inputHistory.pop();
+            }
+        }
+        inputHistoryIndex = -1; // 重置索引
+    }
+    
+    // 添加缺失的润色消息显示函数
+    function addAIPolishMessage(result, saveToHistory = true) {
+        // 如果结果是多风格润色格式，使用多风格显示函数
+        if (result.normalStyle || result.rephraseStyle) {
+            addMultiStylePolishMessage(result);
+            return;
+        }
+        
+        // 单风格润色的显示
+        const messageId = 'msg-' + (++messageCounter);
+        
+        const serviceEmoji = getServiceEmoji(result.service || 'unknown');
+        const serviceName = getServiceDisplayName(result.service || 'unknown');
+        
+        const messageContent = `
+            <div class="polishing-result">
+                <div class="service-info">
+                    <span>${serviceEmoji} 由 ${serviceName} 提供的润色</span>
+                </div>
+                <div class="polish-results">
+                    <div class="result-group">
+                        <div class="content-header">润色结果</div>
+                        <div class="content-body">${escapeHtml(result.translatedText || '润色失败')}</div>
+                    </div>
+                </div>
+                <div class="message-actions">
+                    <button class="message-action-btn copy-btn" data-message-id="${messageId}">
+                        <i class="bi bi-clipboard"></i> 复制结果
+                    </button>
+                    <button class="message-action-btn copy-to-input-btn" data-message-id="${messageId}">
+                        <i class="bi bi-arrow-return-left"></i> 复制到对话框
+                    </button>
+                </div>
+            </div>
+        `;
+        
+        const messageHTML = `
+            <div id="${messageId}" class="message ai">
+                <div class="message-content">
+                    ${messageContent}
+                </div>
+            </div>
+        `;
+        
+        chatMessages.insertAdjacentHTML('beforeend', messageHTML);
+        
+        // 添加复制按钮事件
+        document.querySelector(`#${messageId} .copy-btn`).addEventListener('click', function() {
+            copyTextToClipboard(result.translatedText);
+            // 修改：在按钮旁显示通知
+            showNotification('已复制润色结果', this);
+        });
+        
+        // 添加复制到对话框按钮事件
+        document.querySelector(`#${messageId} .copy-to-input-btn`).addEventListener('click', function() {
+            chatInput.value = result.translatedText;
+            chatInput.focus();
+            // 修改：在按钮旁显示通知
+            showNotification('已复制到对话框', this);
+            // 触发输入框高度调整
+            setTimeout(autoResizeInput, 0);
+        });
+        
+        // 保存消息到当前对话
+        if (saveToHistory) {
+            saveMessageToCurrentConversation({
+                type: 'ai',
+                polishResult: result,
+                time: new Date().toISOString()
+            });
+        }
+        
+        scrollToBottom();
+    }
+
+    // 上次使用的模型设置
+    let lastTranslateService = localStorage.getItem('lastTranslateService') || 'gpt';
+    let lastPolishService = localStorage.getItem('lastPolishService') || 'gpt';
+    
+    // 应用上次使用的设置
+    document.querySelector(`input[name="translate-service"][value="${lastTranslateService}"]`)?.checked = true;
+    document.querySelector(`input[name="polish-service"][value="${lastPolishService}"]`)?.checked = true;
+    
+    // 监听翻译服务选择变化
+    document.querySelectorAll('input[name="translate-service"]').forEach(radio => {
+        radio.addEventListener('change', function() {
+            if (this.checked) {
+                localStorage.setItem('lastTranslateService', this.value);
+            }
+        });
+    });
+    
+    // 监听润色服务选择变化
+    document.querySelectorAll('input[name="polish-service"]').forEach(radio => {
+        radio.addEventListener('change', function() {
+            if (this.checked) {
+                localStorage.setItem('lastPolishService', this.value);
+            }
+        });
+    });
+
+    // 导出核心功能到全局，确保优先级高的事件处理程序能够访问
+    window.handleTranslate = handleTranslate;
+    window.handlePolish = handlePolish;
+    
+    // 初始化调用一次自动调整输入框高度
+    autoResizeInput();
 });

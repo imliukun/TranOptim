@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>最小化测试</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background-color: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        
+        h1 {
+            color: #333;
+        }
+        
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            padding: 10px 20px;
+            margin: 10px 5px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: background-color 0.3s;
+        }
+        
+        .btn i {
+            margin-right: 8px;
+        }
+        
+        .primary-btn {
+            background-color: #3e6ae1;
+            color: white;
+        }
+        
+        .primary-btn:hover {
+            background-color: #2952c8;
+        }
+        
+        .secondary-btn {
+            background-color: #6c7dd0;
+            color: white;
+        }
+        
+        .secondary-btn:hover {
+            background-color: #5c6bb9;
+        }
+        
+        .input-area {
+            margin: 20px 0;
+        }
+        
+        textarea {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            min-height: 100px;
+            margin-bottom: 10px;
+            font-family: inherit;
+        }
+        
+        .result {
+            margin-top: 20px;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            background-color: #f9f9f9;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>最小化功能测试</h1>
+        
+        <div class="input-area">
+            <textarea id="inputText" placeholder="输入文本..."></textarea>
+        </div>
+        
+        <div class="button-area">
+            <button class="btn primary-btn" id="translateBtn" onclick="handleTranslate()">
+                <i class="fas fa-language"></i> 翻译
+            </button>
+            
+            <button class="btn secondary-btn" id="polishBtn" onclick="handlePolish()">
+                <i class="fas fa-magic"></i> 润色
+            </button>
+        </div>
+        
+        <div class="result" id="result">
+            结果将显示在这里
+        </div>
+    </div>
+    
+    <script>
+        // 简单的函数实现
+        function handleTranslate() {
+            console.log('翻译按钮被点击');
+            const inputText = document.getElementById('inputText').value.trim();
+            if (!inputText) {
+                alert('请输入要翻译的文本');
+                return;
+            }
+            
+            document.getElementById('result').innerHTML = `
+                <h3>翻译结果</h3>
+                <p><strong>原文：</strong>${inputText}</p>
+                <p><strong>译文：</strong>${inputText} (这是一个模拟翻译结果)</p>
+            `;
+        }
+        
+        function handlePolish() {
+            console.log('润色按钮被点击');
+            const inputText = document.getElementById('inputText').value.trim();
+            if (!inputText) {
+                alert('请输入要润色的文本');
+                return;
+            }
+            
+            document.getElementById('result').innerHTML = `
+                <h3>润色结果</h3>
+                <p><strong>原文：</strong>${inputText}</p>
+                <p><strong>润色：</strong>${inputText} (这是一个模拟润色结果)</p>
+            `;
+        }
+        
+        // 日志输出
+        console.log('测试页面已加载');
+    </script>
+</body>
+</html> 
