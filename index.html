@@ -6,76 +6,13 @@
     <title>TranOptim - 智能翻译与润色工具</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="stylesheet" href="css/style.css">
-    <!-- 添加输入框调整高度相关样式 -->
-    <style>
-        /* 输入框高度调整样式 */
-        .textarea-wrapper {
-            position: relative;
-            width: 100%;
-        }
-        
-        .chat-input {
-            width: 100%;
-            min-height: 40px;
-            max-height: 200px;
-            padding: 10px;
-            border: 1px solid #ccc;
-            border-radius: 5px;
-            font-size: 14px;
-            line-height: 1.5;
-            resize: none;
-            transition: height 0.2s ease;
-            overflow-y: hidden;
-        }
-        
-        /* 按钮点击反馈样式 */
-        .button-clicked {
-            transform: scale(0.95);
-            opacity: 0.8;
-            transition: transform 0.1s, opacity 0.1s;
-        }
-        
-        /* 图片预览容器样式 */
-        .image-preview-container {
-            margin-bottom: 10px;
-            border-radius: 5px;
-            overflow: hidden;
-            position: relative;
-        }
-        
-        .preview-wrapper {
-            position: relative;
-            max-height: 200px;
-            overflow: hidden;
-        }
-        
-        .preview-image {
-            max-width: 100%;
-            max-height: 200px;
-            display: block;
-        }
-        
-        .remove-image-btn {
-            position: absolute;
-            top: 5px;
-            right: 5px;
-            background: rgba(0, 0, 0, 0.7);
-            color: white;
-            border: none;
-            border-radius: 50%;
-            width: 26px;
-            height: 26px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            cursor: pointer;
-        }
-    </style>
     <!-- 认证配置和脚本 -->
     <script src="auth-config.js"></script>
     <script src="js/auth.js"></script>
     <!-- Cloudflare部署配置 -->
     <script src="cloudflare-config.js"></script>
+    <!-- 应用脚本 -->
+    <script src="js/app.js"></script>
 </head>
 <body>
     <div class="container">
@@ -314,27 +251,9 @@
     <!-- 通知组件 -->
     <div class="notification" id="notification"></div>
 
-    <!-- 应用脚本 - 优化脚本加载顺序 -->
-    <!-- 0. 首先加载设置按钮处理脚本，确保设置面板正常工作 -->
-    <script src="js/settings-buttons.js"></script>
-    
-    <!-- 0.5 加载图片处理模块 -->
-    <script src="js/image-handler.js"></script>
-    
-    <!-- 0.6 加载输入框自动调整模块 -->
-    <script src="js/input-auto-resize.js"></script>
-    
-    <!-- 1. 然后加载复制功能模块 -->
-    <script src="js/copy-functions.js"></script>
-    
-    <!-- 2. 然后加载增强版按钮修复脚本，确保按钮事件被正确绑定 -->
-    <script src="js/main-buttons-fix.js"></script>
-    
-    <!-- 3. 接着加载主应用脚本 -->
-    <script src="js/app.js" defer></script>
-    
-    <!-- 4. 最后加载聊天脚本 -->
-    <script src="js/chat.js" defer></script>
+    <!-- 应用脚本 -->
+    <script src="js/app.js"></script>
+    <script src="js/chat.js"></script>
     
     <!-- 认证初始检查脚本 -->
     <script>

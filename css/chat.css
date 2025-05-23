@@ -704,23 +704,22 @@
     white-space: nowrap;
     pointer-events: none;
     opacity: 0;
-    transform: translateY(0);
+    transform: translateY(-50%);
     transition: opacity 0.3s, transform 0.3s;
     z-index: 1000;
-    top: -30px;
-    left: 50%;
-    transform: translateX(-50%);
+    top: 50%;
+    left: calc(100% + 8px);
 }
 
 .button-notification::after {
     content: '';
     position: absolute;
-    bottom: -5px;
-    left: 50%;
-    transform: translateX(-50%);
-    border-width: 5px 5px 0;
+    top: 50%;
+    left: -5px;
+    transform: translateY(-50%);
+    border-width: 5px 5px 5px 0;
     border-style: solid;
-    border-color: #333 transparent transparent;
+    border-color: transparent #333 transparent transparent;
 }
 
 .button-notification.show {
