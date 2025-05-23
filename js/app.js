@@ -1,16 +1,195 @@
 // TranOptim - 智能翻译与润色工具 JavaScript
 console.log('[DEBUG] TranOptim app.js script started loading!');
 
+// 全局变量定义
+let currentImageFile = null;
+let messageCounter = 0;
+let conversations = [];
+let currentConversationId = null;
+let activeSettingsPanel = null;
+let inputHistory = [];
+let inputHistoryIndex = -1;
+
+// 全局DOM元素引用
+let chatMessages = null;
+let chatInput = null;
+let translateBtn = null;
+let polishBtn = null;
+let uploadImageBtn = null;
+let imageUpload = null;
+
+// 输入框自动高度调整函数 - 移到全局作用域
+function autoResizeInput() {
+    if (!chatInput) return;
+    
+    // 重置高度以获取准确的scrollHeight
+    chatInput.style.height = 'auto';
+    
+    // 设置最小高度为一行，最大高度为6行
+    const lineHeight = 24; // 根据CSS中的line-height计算
+    const minHeight = lineHeight * 1;
+    const maxHeight = lineHeight * 6;
+    
+    // 计算实际需要的高度
+    let newHeight = chatInput.scrollHeight;
+    
+    // 限制在最小和最大高度之间
+    if (newHeight < minHeight) newHeight = minHeight;
+    if (newHeight > maxHeight) newHeight = maxHeight;
+    
+    chatInput.style.height = newHeight + 'px';
+    console.log('输入框高度调整为:', newHeight, 'px');
+}
+
+// 复制文本到剪贴板函数 - 移到全局作用域
+function copyTextToClipboard(text) {
+    const tempElement = document.createElement('textarea');
+    tempElement.value = text;
+    document.body.appendChild(tempElement);
+    tempElement.select();
+    document.execCommand('copy');
+    document.body.removeChild(tempElement);
+}
+
+// 显示通知函数 - 移到全局作用域
+function showNotification(message, target = null, type = 'success') {
+    console.log('显示通知:', message, '目标元素:', !!target);
+    
+    // 如果提供了目标元素，则显示目标元素旁的通知
+    if (target && target instanceof HTMLElement) {
+        // 检查元素上是否已经有通知，如果有则删除
+        const existingNotification = target.querySelector('.button-notification');
+        if (existingNotification) {
+            existingNotification.remove();
+        }
+        
+        // 创建新的通知元素
+        const buttonNotification = document.createElement('div');
+        buttonNotification.className = 'button-notification';
+        buttonNotification.textContent = message;
+        
+        // 添加到目标元素
+        target.appendChild(buttonNotification);
+        
+        // 显示通知
+        setTimeout(() => {
+            buttonNotification.classList.add('show');
+        }, 10);
+        
+        // 3秒后自动隐藏
+        setTimeout(() => {
+            buttonNotification.classList.remove('show');
+            // 动画完成后移除元素
+            setTimeout(() => {
+                buttonNotification.remove();
+            }, 300);
+        }, 2000);
+    } else {
+        // 使用全局通知
+        let globalNotification = document.getElementById('notification');
+        if (!globalNotification) {
+            // 创建全局通知元素
+            globalNotification = document.createElement('div');
+            globalNotification.id = 'notification';
+            globalNotification.className = 'notification';
+            document.body.appendChild(globalNotification);
+        }
+        
+        globalNotification.textContent = message;
+        globalNotification.classList.add('show');
+        
+        // 3秒后自动隐藏
+        setTimeout(() => {
+            globalNotification.classList.remove('show');
+        }, 3000);
+    }
+}
+
+// 滚动到底部函数 - 移到全局作用域
+function scrollToBottom() {
+    if (chatMessages) {
+        chatMessages.scrollTop = chatMessages.scrollHeight;
+    }
+}
+
+// HTML转义函数 - 移到全局作用域
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+// 保存对话消息函数 - 移到全局作用域
+function saveMessageToCurrentConversation(message) {
+    // 这个函数需要对话管理功能，暂时留空
+    console.log('保存消息到对话:', message);
+}
+
+// 添加加载消息函数 - 移到全局作用域
+function addLoadingMessage() {
+    if (!chatMessages) return null;
+    
+    const messageId = 'loading-msg-' + (++messageCounter);
+    
+    const messageHTML = `
+        <div id="${messageId}" class="message ai loading">
+            <div class="message-content">
+                <div class="typing-indicator">
+                    <span></span>
+                    <span></span>
+                    <span></span>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    chatMessages.insertAdjacentHTML('beforeend', messageHTML);
+    scrollToBottom();
+    
+    return messageId;
+}
+
+// 移除加载消息函数 - 移到全局作用域
+function removeLoadingMessage(messageId) {
+    if (!messageId) return;
+    
+    const loadingMessage = document.getElementById(messageId);
+    if (loadingMessage) {
+        loadingMessage.remove();
+    }
+}
+
+// 添加错误消息函数 - 移到全局作用域
+function addErrorMessage(errorText) {
+    if (!chatMessages) return;
+    
+    const messageId = 'msg-' + (++messageCounter);
+    
+    const messageHTML = `
+        <div id="${messageId}" class="message ai error">
+            <div class="message-content">
+                <div class="error-message">
+                    <i class="fas fa-exclamation-triangle"></i>
+                    <p>${errorText}</p>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    chatMessages.insertAdjacentHTML('beforeend', messageHTML);
+    scrollToBottom();
+}
+
 document.addEventListener('DOMContentLoaded', function() {
     console.log('[DEBUG] DOMContentLoaded event fired. Initializing app...');
 
     // 获取DOM元素 - 聊天界面元素 (修正选择器)
-    const chatMessages = document.getElementById('chatMessages');
-    const chatInput = document.getElementById('chatInput');
-    const translateBtn = document.getElementById('translateBtn');
-    const polishBtn = document.getElementById('polishBtn');
-    const uploadImageBtn = document.getElementById('uploadBtn');
-    const imageUpload = document.getElementById('imageUpload');
+    chatMessages = document.getElementById('chatMessages');
+    chatInput = document.getElementById('chatInput');
+    translateBtn = document.getElementById('translateBtn');
+    polishBtn = document.getElementById('polishBtn');
+    uploadImageBtn = document.getElementById('uploadBtn');
+    imageUpload = document.getElementById('imageUpload');
     const sourceLang = document.getElementById('sourceLanguage');
     const targetLang = document.getElementById('targetLanguage');
     const newChatBtn = document.getElementById('newChatBtn');
@@ -30,15 +209,6 @@ document.addEventListener('DOMContentLoaded', function() {
     const notification = document.getElementById('notification');
     const notificationMessage = document.getElementById('notification-message');
     
-    // 初始化状态
-    let currentImageFile = null;
-    let messageCounter = 0;
-    let conversations = [];
-    let currentConversationId = null;
-    let activeSettingsPanel = null;
-    let inputHistory = [];
-    let inputHistoryIndex = -1;
-    
     console.log('DOM元素检查：', {
         chatMessages: !!chatMessages,
         chatInput: !!chatInput,
@@ -51,29 +221,6 @@ document.addEventListener('DOMContentLoaded', function() {
         newChatBtn: !!newChatBtn,
         clearChatsBtn: !!clearChatsBtn
     });
-    
-    // 输入框自动高度调整
-    function autoResizeInput() {
-        if (!chatInput) return;
-        
-        // 重置高度以获取准确的scrollHeight
-        chatInput.style.height = 'auto';
-        
-        // 设置最小高度为一行，最大高度为6行
-        const lineHeight = 24; // 根据CSS中的line-height计算
-        const minHeight = lineHeight * 1;
-        const maxHeight = lineHeight * 6;
-        
-        // 计算实际需要的高度
-        let newHeight = chatInput.scrollHeight;
-        
-        // 限制在最小和最大高度之间
-        if (newHeight < minHeight) newHeight = minHeight;
-        if (newHeight > maxHeight) newHeight = maxHeight;
-        
-        chatInput.style.height = newHeight + 'px';
-        console.log('输入框高度调整为:', newHeight, 'px');
-    }
     
     // 输入框事件监听
     if (chatInput) {
@@ -1239,77 +1386,6 @@ document.addEventListener('DOMContentLoaded', function() {
         currentMode = 'polish';
     }
     
-    // 显示通知函数 - 优化为按钮右侧显示
-    function showNotification(message, target = null, type = 'success') {
-        console.log('显示通知:', message, '目标元素:', !!target);
-        
-        // 如果提供了目标元素，则显示目标元素旁的通知
-        if (target && target instanceof HTMLElement) {
-            // 检查元素上是否已经有通知，如果有则删除
-            const existingNotification = target.querySelector('.button-notification');
-            if (existingNotification) {
-                existingNotification.remove();
-            }
-            
-            // 创建新的通知元素
-            const buttonNotification = document.createElement('div');
-            buttonNotification.className = 'button-notification';
-            buttonNotification.textContent = message;
-            
-            // 添加到目标元素
-            target.appendChild(buttonNotification);
-            
-            // 显示通知
-            setTimeout(() => {
-                buttonNotification.classList.add('show');
-            }, 10);
-            
-            // 3秒后自动隐藏
-            setTimeout(() => {
-                buttonNotification.classList.remove('show');
-                // 动画完成后移除元素
-                setTimeout(() => {
-                    buttonNotification.remove();
-                }, 300);
-            }, 2000);
-        } else {
-            // 使用全局通知
-            let globalNotification = notification;
-            if (!globalNotification) {
-                // 创建全局通知元素
-                globalNotification = document.createElement('div');
-                globalNotification.id = 'notification';
-                globalNotification.className = 'notification';
-                document.body.appendChild(globalNotification);
-            }
-            
-            globalNotification.textContent = message;
-            globalNotification.classList.add('show');
-            
-            // 3秒后自动隐藏
-            setTimeout(() => {
-                globalNotification.classList.remove('show');
-            }, 3000);
-        }
-    }
-    
-    // 复制文本到剪贴板函数
-    function copyTextToClipboard(text) {
-        const tempElement = document.createElement('textarea');
-        tempElement.value = text;
-        document.body.appendChild(tempElement);
-        tempElement.select();
-        document.execCommand('copy');
-        document.body.removeChild(tempElement);
-    }
-    
-    // 从HTML中提取纯文本
-    function getPlainTextFromHTML(html) {
-        const tempDiv = document.createElement('div');
-        tempDiv.innerHTML = html;
-        return tempDiv.textContent || tempDiv.innerText || '';
-    }
-    
     // 模拟翻译功能
     function simulateTranslation(text, service, fromLang, toLang) {
         // 这里只是模拟，实际应用中应该调用相应的API
@@ -2094,75 +2170,6 @@ function addAIPolishMessage(result, saveToHistory = true) {
     }
     
     scrollToBottom();
-}
-
-function escapeHtml(text) {
-    const div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
-}
-
-function addLoadingMessage() {
-    if (!chatMessages) return null;
-    
-    const messageId = 'loading-msg-' + (++messageCounter);
-    
-    const messageHTML = `
-        <div id="${messageId}" class="message ai loading">
-            <div class="message-content">
-                <div class="typing-indicator">
-                    <span></span>
-                    <span></span>
-                    <span></span>
-                </div>
-            </div>
-        </div>
-    `;
-    
-    chatMessages.insertAdjacentHTML('beforeend', messageHTML);
-    scrollToBottom();
-    
-    return messageId;
-}
-
-function removeLoadingMessage(messageId) {
-    if (!messageId) return;
-    
-    const loadingMessage = document.getElementById(messageId);
-    if (loadingMessage) {
-        loadingMessage.remove();
-    }
-}
-
-function addErrorMessage(errorText) {
-    if (!chatMessages) return;
-    
-    const messageId = 'msg-' + (++messageCounter);
-    
-    const messageHTML = `
-        <div id="${messageId}" class="message ai error">
-            <div class="message-content">
-                <div class="error-message">
-                    <i class="fas fa-exclamation-triangle"></i>
-                    <p>${errorText}</p>
-                </div>
-            </div>
-        </div>
-    `;
-    
-    chatMessages.insertAdjacentHTML('beforeend', messageHTML);
-    scrollToBottom();
-}
-
-function scrollToBottom() {
-    if (chatMessages) {
-        chatMessages.scrollTop = chatMessages.scrollHeight;
-    }
-}
-
-function saveMessageToCurrentConversation(message) {
-    // 这个函数需要对话管理功能，暂时留空
-    console.log('保存消息到对话:', message);
 }
 
 // 在页面加载完成后执行初始化
