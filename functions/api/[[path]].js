@@ -346,32 +346,320 @@ async function handleTextPolish(request, env) {
 
 // 调用翻译服务的辅助函数
 async function callTranslationService(text, sourceLang, targetLang, service, env) {
-  // 返回与本地server.js一致的数据结构
+  try {
+    if (service === 'gpt') {
+      return await callOpenAITranslation(text, sourceLang, targetLang, env);
+    } else if (service === 'deepseek') {
+      return await callDeepSeekTranslation(text, sourceLang, targetLang, env);
+    } else if (service === 'qwen') {
+      return await callQwenTranslation(text, sourceLang, targetLang, env);
+    } else if (service === 'gemini') {
+      return await callGeminiTranslation(text, sourceLang, targetLang, env);
+    } else {
+      throw new Error(`不支持的翻译服务: ${service}`);
+    }
+  } catch (error) {
+    console.error(`${service}翻译失败:`, error);
+    return {
+      originalText: text,
+      translatedText: `翻译失败: ${error.message}`,
+      service: service === 'gpt' ? 'ChatGPT' : service.toUpperCase(),
+      error: true
+    };
+  }
+}
+
+// OpenAI翻译实现
+async function callOpenAITranslation(text, sourceLang, targetLang, env) {
+  const apiKey = env.OPENAI_API_KEY;
+  if (!apiKey) {
+    throw new Error('请配置 OPENAI_API_KEY 环境变量');
+  }
+
+  const fromLangName = getLanguageName(sourceLang);
+  const toLangName = getLanguageName(targetLang);
+  
+  const prompt = sourceLang === 'auto' 
+    ? `请将以下文本翻译成${toLangName}，请直接输出翻译结果，不要包含任何解释或额外内容：\n\n${text}`
+    : `请将以下${fromLangName}文本翻译成${toLangName}，请直接输出翻译结果，不要包含任何解释或额外内容：\n\n${text}`;
+
+  const response = await fetch('https://api.openai.com/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${apiKey}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      model: 'gpt-4o-mini',
+      messages: [{
+        role: 'user',
+        content: prompt
+      }],
+      max_tokens: Math.min(4000, text.length * 3),
+      temperature: 0.3
+    })
+  });
+
+  if (!response.ok) {
+    throw new Error(`OpenAI API错误: ${response.status} ${response.statusText}`);
+  }
+
+  const data = await response.json();
+  const translatedText = data.choices[0]?.message?.content?.trim();
+  
+  if (!translatedText) {
+    throw new Error('OpenAI返回空结果');
+  }
+
   return {
     originalText: text,
-    translatedText: `[Cloudflare ${service}翻译] ${text}`,
-    service: service === 'gpt' ? 'ChatGPT' : service.toUpperCase(),
+    translatedText: translatedText,
+    service: 'ChatGPT',
+    error: false
+  };
+}
+
+// DeepSeek翻译实现
+async function callDeepSeekTranslation(text, sourceLang, targetLang, env) {
+  const apiKey = env.DEEPSEEK_API_KEY;
+  if (!apiKey) {
+    throw new Error('请配置 DEEPSEEK_API_KEY 环境变量');
+  }
+
+  const fromLangName = getLanguageName(sourceLang);
+  const toLangName = getLanguageName(targetLang);
+  
+  const prompt = sourceLang === 'auto' 
+    ? `请将以下文本翻译成${toLangName}，请直接输出翻译结果，不要包含任何解释或额外内容：\n\n${text}`
+    : `请将以下${fromLangName}文本翻译成${toLangName}，请直接输出翻译结果，不要包含任何解释或额外内容：\n\n${text}`;
+
+  const response = await fetch('https://api.siliconflow.cn/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${apiKey}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      model: 'deepseek-ai/DeepSeek-V3',
+      messages: [{
+        role: 'user',
+        content: prompt
+      }],
+      max_tokens: Math.min(4000, text.length * 3),
+      temperature: 0.3
+    })
+  });
+
+  if (!response.ok) {
+    throw new Error(`DeepSeek API错误: ${response.status} ${response.statusText}`);
+  }
+
+  const data = await response.json();
+  const translatedText = data.choices[0]?.message?.content?.trim();
+  
+  if (!translatedText) {
+    throw new Error('DeepSeek返回空结果');
+  }
+
+  return {
+    originalText: text,
+    translatedText: translatedText,
+    service: 'DeepSeek',
+    error: false
+  };
+}
+
+// 获取语言名称的辅助函数
+function getLanguageName(langCode) {
+  const langMap = {
+    'zh': '中文',
+    'en': '英文',
+    'ja': '日文',
+    'ko': '韩文',
+    'fr': '法文',
+    'de': '德文',
+    'es': '西班牙文',
+    'pt': '葡萄牙文',
+    'ru': '俄文',
+    'it': '意大利文',
+    'auto': '自动检测'
+  };
+  return langMap[langCode] || langCode;
+}
+
+// Qwen和Gemini的实现（简化版）
+async function callQwenTranslation(text, sourceLang, targetLang, env) {
+  // 暂时使用占位符实现
+  return {
+    originalText: text,
+    translatedText: `[Qwen翻译服务暂未实现] ${text}`,
+    service: 'Qwen',
+    error: false
+  };
+}
+
+async function callGeminiTranslation(text, sourceLang, targetLang, env) {
+  // 暂时使用占位符实现
+  return {
+    originalText: text,
+    translatedText: `[Gemini翻译服务暂未实现] ${text}`,
+    service: 'Gemini',
     error: false
   };
 }
 
 // 调用润色服务的辅助函数
 async function callPolishService(text, style, service, env, multiStyle = false) {
-  // 返回与本地server.js一致的数据结构
-  if (multiStyle) {
-    return {
-      originalText: text,
-      normalStyle: `[Cloudflare ${service}润色 - 常规优化] ${text}`,
-      rephraseStyle: `[Cloudflare ${service}润色 - 转换语言] ${text}`,
-      service: service === 'gpt' ? 'ChatGPT' : service.toUpperCase()
-    };
-  } else {
-    return {
-      originalText: text,
-      translatedText: `[Cloudflare ${service}润色 - ${style}风格] ${text}`,
-      service: service === 'gpt' ? 'ChatGPT' : service.toUpperCase(),
-      style: style,
-      error: false
-    };
+  try {
+    if (multiStyle) {
+      // 多风格润色
+      const normalResult = await callPolishAPI(text, 'normal', service, env);
+      const rephraseResult = await callPolishAPI(text, 'rephrase', service, env);
+      
+      return {
+        originalText: text,
+        normalStyle: normalResult.translatedText,
+        rephraseStyle: rephraseResult.translatedText,
+        service: normalResult.service
+      };
+    } else {
+      // 单风格润色
+      return await callPolishAPI(text, style, service, env);
+    }
+  } catch (error) {
+    console.error(`${service}润色失败:`, error);
+    if (multiStyle) {
+      return {
+        originalText: text,
+        normalStyle: `润色失败: ${error.message}`,
+        rephraseStyle: `润色失败: ${error.message}`,
+        service: service === 'gpt' ? 'ChatGPT' : service.toUpperCase()
+      };
+    } else {
+      return {
+        originalText: text,
+        translatedText: `润色失败: ${error.message}`,
+        service: service === 'gpt' ? 'ChatGPT' : service.toUpperCase(),
+        style: style,
+        error: true
+      };
+    }
   }
+}
+
+// 调用润色API的通用函数
+async function callPolishAPI(text, style, service, env) {
+  if (service === 'gpt') {
+    return await callOpenAIPolish(text, style, env);
+  } else if (service === 'deepseek') {
+    return await callDeepSeekPolish(text, style, env);
+  } else {
+    throw new Error(`不支持的润色服务: ${service}`);
+  }
+}
+
+// OpenAI润色实现
+async function callOpenAIPolish(text, style, env) {
+  const apiKey = env.OPENAI_API_KEY;
+  if (!apiKey) {
+    throw new Error('请配置 OPENAI_API_KEY 环境变量');
+  }
+
+  let prompt;
+  if (style === 'normal') {
+    prompt = `请对以下文本进行常规优化，保持原意的同时提升表达质量和流畅度。请直接输出优化后的文本，不要包含任何解释：\n\n${text}`;
+  } else if (style === 'rephrase') {
+    prompt = `请重新组织以下文本的表达方式，保持核心内容不变但使用不同的语言结构和词汇。请直接输出改写后的文本，不要包含任何解释：\n\n${text}`;
+  } else {
+    prompt = `请对以下文本进行${style}风格的润色优化。请直接输出优化后的文本，不要包含任何解释：\n\n${text}`;
+  }
+
+  const response = await fetch('https://api.openai.com/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${apiKey}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      model: 'gpt-4o-mini',
+      messages: [{
+        role: 'user',
+        content: prompt
+      }],
+      max_tokens: Math.min(4000, text.length * 3),
+      temperature: 0.7
+    })
+  });
+
+  if (!response.ok) {
+    throw new Error(`OpenAI API错误: ${response.status} ${response.statusText}`);
+  }
+
+  const data = await response.json();
+  const polishedText = data.choices[0]?.message?.content?.trim();
+  
+  if (!polishedText) {
+    throw new Error('OpenAI返回空结果');
+  }
+
+  return {
+    originalText: text,
+    translatedText: polishedText,
+    service: 'ChatGPT',
+    style: style,
+    error: false
+  };
+}
+
+// DeepSeek润色实现
+async function callDeepSeekPolish(text, style, env) {
+  const apiKey = env.DEEPSEEK_API_KEY;
+  if (!apiKey) {
+    throw new Error('请配置 DEEPSEEK_API_KEY 环境变量');
+  }
+
+  let prompt;
+  if (style === 'normal') {
+    prompt = `请对以下文本进行常规优化，保持原意的同时提升表达质量和流畅度。请直接输出优化后的文本，不要包含任何解释：\n\n${text}`;
+  } else if (style === 'rephrase') {
+    prompt = `请重新组织以下文本的表达方式，保持核心内容不变但使用不同的语言结构和词汇。请直接输出改写后的文本，不要包含任何解释：\n\n${text}`;
+  } else {
+    prompt = `请对以下文本进行${style}风格的润色优化。请直接输出优化后的文本，不要包含任何解释：\n\n${text}`;
+  }
+
+  const response = await fetch('https://api.siliconflow.cn/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${apiKey}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      model: 'deepseek-ai/DeepSeek-V3',
+      messages: [{
+        role: 'user',
+        content: prompt
+      }],
+      max_tokens: Math.min(4000, text.length * 3),
+      temperature: 0.7
+    })
+  });
+
+  if (!response.ok) {
+    throw new Error(`DeepSeek API错误: ${response.status} ${response.statusText}`);
+  }
+
+  const data = await response.json();
+  const polishedText = data.choices[0]?.message?.content?.trim();
+  
+  if (!polishedText) {
+    throw new Error('DeepSeek返回空结果');
+  }
+
+  return {
+    originalText: text,
+    translatedText: polishedText,
+    service: 'DeepSeek',
+    style: style,
+    error: false
+  };
 } 
