@@ -17,6 +17,29 @@ const AuthConfig = {
   }
 };
 
+// 代理配置 - 用于访问可能被地区限制的API
+function getProxyConfig(env) {
+  return {
+    openai: {
+      useProxy: true,
+      // 支持多个代理服务器，按优先级尝试
+      urls: [
+        env.OPENAI_PROXY_URL || 'https://api.openai-sb.com/v1',
+        'https://api.openai.com/v1', // 官方直连
+        'https://openai.api2d.net/v1', // API2D代理
+        'https://api.chatanywhere.com.cn/v1' // ChatAnywhere代理
+      ]
+    },
+    gemini: {
+      useProxy: true,
+      urls: [
+        env.GEMINI_PROXY_URL || 'https://generativelanguage.googleapis.com/v1beta',
+        'https://generativelanguage.googleapis.com/v1beta' // 官方直连
+      ]
+    }
+  };
+}
+
 export async function onRequest(context) {
   // 获取请求信息
   const { request, env } = context;
@@ -401,83 +424,72 @@ async function callOpenAITranslation(text, sourceLang, targetLang, env) {
     ? `请将以下文本翻译成${toLangName}，请直接输出翻译结果，不要包含任何解释或额外内容：\n\n${text}`
     : `请将以下${fromLangName}文本翻译成${toLangName}，请直接输出翻译结果，不要包含任何解释或额外内容：\n\n${text}`;
 
-  // 智能网络路由：尝试多个端点和模型
-  const endpoints = [
-    {
-      url: 'https://api.openai.com/v1/chat/completions',
-      models: ['gpt-4o', 'gpt-3.5-turbo'],
-      name: 'OpenAI Official',
-      timeout: 10000
-    },
-    {
-      url: 'https://api.chatanywhere.tech/v1/chat/completions',
-      models: ['gpt-4o', 'gpt-3.5-turbo'],
-      name: 'ChatAnywhere',
-      timeout: 15000
-    },
-    {
-      url: 'https://api.openai-proxy.com/v1/chat/completions',
-      models: ['gpt-3.5-turbo'],
-      name: 'OpenAI Proxy 1',
-      timeout: 20000
-    }
-  ];
-  
+  // 尝试使用gpt-4o，如果失败则降级到gpt-3.5-turbo
+  const models = ['gpt-4o', 'gpt-3.5-turbo'];
   let lastError;
   
-  for (const endpoint of endpoints) {
-    for (const model of endpoint.models) {
-      try {
-        console.log(`尝试 ${endpoint.name} - ${model}`);
-        
-        const response = await fetch(endpoint.url, {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${apiKey}`,
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            model: model,
-            messages: [{
-              role: 'user',
-              content: prompt
-            }],
-            max_tokens: 2048,
-            temperature: 0.3
-          }),
-          signal: AbortSignal.timeout(endpoint.timeout)
-        });
+  for (const model of models) {
+    try {
+      // 尝试不同的API端点
+      const apiUrls = getProxyConfig(env).openai.urls;
+      
+      for (const baseUrl of apiUrls) {
+        try {
+          const apiUrl = `${baseUrl}/chat/completions`;
+          console.log(`尝试OpenAI API: ${model} @ ${apiUrl}`);
+          
+          const response = await fetch(apiUrl, {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${apiKey}`,
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+              model: model,
+              messages: [{
+                role: 'user',
+                content: prompt
+              }],
+              max_tokens: 2048,
+              temperature: 0.3
+            })
+          });
 
-        if (!response.ok) {
-          const errorData = await response.text();
-          console.log(`${endpoint.name} - ${model} 失败: ${response.status} ${response.statusText}`);
-          throw new Error(`OpenAI API错误: ${response.status} ${response.statusText} - ${errorData}`);
+          if (!response.ok) {
+            const errorData = await response.text();
+            throw new Error(`OpenAI API错误: ${response.status} ${response.statusText} - ${errorData}`);
+          }
+
+          const data = await response.json();
+          const translatedText = data.choices[0]?.message?.content?.trim();
+          
+          if (!translatedText) {
+            throw new Error('OpenAI返回空结果');
+          }
+
+          console.log(`OpenAI翻译成功: ${model} @ ${apiUrl}`);
+          return {
+            originalText: text,
+            translatedText: translatedText,
+            service: 'ChatGPT',
+            error: false
+          };
+        } catch (urlError) {
+          console.log(`OpenAI API ${baseUrl} 失败:`, urlError.message);
+          if (baseUrl === apiUrls[apiUrls.length - 1]) {
+            throw urlError; // 如果是最后一个URL也失败了，抛出错误
+          }
         }
-
-        const data = await response.json();
-        const translatedText = data.choices[0]?.message?.content?.trim();
-        
-        if (!translatedText) {
-          throw new Error('OpenAI返回空结果');
-        }
-
-        console.log(`${endpoint.name} - ${model} 成功`);
-        return {
-          originalText: text,
-          translatedText: translatedText,
-          service: 'ChatGPT',
-          error: false
-        };
-      } catch (error) {
-        lastError = error;
-        console.log(`${endpoint.name} - ${model} 失败:`, error.message);
-        continue;
+      }
+    } catch (error) {
+      lastError = error;
+      console.log(`OpenAI模型 ${model} 失败，尝试下一个模型:`, error.message);
+      if (model === models[models.length - 1]) {
+        // 如果是最后一个模型也失败了，抛出错误
+        throw lastError;
       }
     }
   }
-  
-  // 如果所有端点都失败，抛出最后一个错误
-  throw lastError;
 }
 
 // DeepSeek翻译实现
@@ -612,27 +624,15 @@ async function callGeminiTranslation(text, sourceLang, targetLang, env) {
     ? `请将以下文本翻译成${toLangName}，请直接输出翻译结果，不要包含任何解释或额外内容：\n\n${text}`
     : `请将以下${fromLangName}文本翻译成${toLangName}，请直接输出翻译结果，不要包含任何解释或额外内容：\n\n${text}`;
 
-  // 智能网络路由：尝试多个区域端点
-  const endpoints = [
-    {
-      url: `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`,
-      name: 'Gemini 1.5',
-      timeout: 15000
-    },
-    {
-      url: `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
-      name: 'Gemini 2.0',
-      timeout: 20000
-    }
-  ];
+  // 尝试不同的API端点
+  const apiUrls = getProxyConfig(env).gemini.urls;
   
-  let lastError;
-  
-  for (const endpoint of endpoints) {
+  for (const baseUrl of apiUrls) {
     try {
-      console.log(`尝试 ${endpoint.name}`);
+      const apiUrl = `${baseUrl}/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+      console.log(`尝试Gemini API: ${apiUrl.replace(apiKey, 'API_KEY_HIDDEN')}`);
       
-      const response = await fetch(endpoint.url, {
+      const response = await fetch(apiUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
@@ -644,17 +644,34 @@ async function callGeminiTranslation(text, sourceLang, targetLang, env) {
             }]
           }],
           generationConfig: {
-            temperature: 0.7,
-            maxOutputTokens: 2048
-          }
-        }),
-        signal: AbortSignal.timeout(endpoint.timeout)
+            temperature: 0.2,
+            topK: 40,
+            topP: 0.95,
+            maxOutputTokens: 8192
+          },
+          safetySettings: [
+            {
+              category: "HARM_CATEGORY_HARASSMENT",
+              threshold: "BLOCK_MEDIUM_AND_ABOVE"
+            },
+            {
+              category: "HARM_CATEGORY_HATE_SPEECH",
+              threshold: "BLOCK_MEDIUM_AND_ABOVE"
+            },
+            {
+              category: "HARM_CATEGORY_SEXUALLY_EXPLICIT",
+              threshold: "BLOCK_MEDIUM_AND_ABOVE"
+            },
+            {
+              category: "HARM_CATEGORY_DANGEROUS_CONTENT",
+              threshold: "BLOCK_MEDIUM_AND_ABOVE"
+            }
+          ]
+        })
       });
 
       if (!response.ok) {
-        const errorData = await response.text();
-        console.log(`${endpoint.name} 失败: ${response.status} ${response.statusText}`);
-        throw new Error(`Gemini API错误: ${response.status} ${response.statusText} - ${errorData}`);
+        throw new Error(`Gemini API错误: ${response.status} ${response.statusText}`);
       }
 
       const data = await response.json();
@@ -672,22 +689,20 @@ async function callGeminiTranslation(text, sourceLang, targetLang, env) {
         throw new Error('Gemini返回空结果');
       }
 
-      console.log(`${endpoint.name} 成功`);
+      console.log(`Gemini翻译成功: ${apiUrl.replace(apiKey, 'API_KEY_HIDDEN')}`);
       return {
         originalText: text,
         translatedText: translatedText,
         service: 'Gemini',
         error: false
       };
-    } catch (error) {
-      lastError = error;
-      console.log(`${endpoint.name} 失败:`, error.message);
-      continue;
+    } catch (urlError) {
+      console.log(`Gemini API ${apiUrl.replace(apiKey, 'API_KEY_HIDDEN')} 失败:`, urlError.message);
+      if (baseUrl === apiUrls[apiUrls.length - 1]) {
+        throw urlError; // 如果是最后一个URL也失败了，抛出错误
+      }
     }
   }
-  
-  // 如果所有端点都失败，抛出最后一个错误
-  throw lastError;
 }
 
 // 豆包翻译实现
@@ -812,76 +827,73 @@ async function callOpenAIPolish(text, style, env) {
     prompt = `请对以下文本进行${style}风格的润色优化。请直接输出优化后的文本，不要包含任何解释：\n\n${text}`;
   }
 
-  // 智能网络路由：尝试多个端点和模型
-  const endpoints = [
-    {
-      url: 'https://api.openai.com/v1/chat/completions',
-      models: ['gpt-4o', 'gpt-3.5-turbo'],
-      name: 'OpenAI Official'
-    },
-    {
-      url: 'https://api.openai-proxy.com/v1/chat/completions',
-      models: ['gpt-4o', 'gpt-3.5-turbo'],
-      name: 'OpenAI Proxy 1'
-    }
-  ];
-  
+  // 尝试使用gpt-4o，如果失败则降级到gpt-3.5-turbo
+  const models = ['gpt-4o', 'gpt-3.5-turbo'];
   let lastError;
   
-  for (const endpoint of endpoints) {
-    for (const model of endpoint.models) {
-      try {
-        console.log(`润色尝试 ${endpoint.name} - ${model}`);
-        
-        const response = await fetch(endpoint.url, {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${apiKey}`,
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            model: model,
-            messages: [{
-              role: 'user',
-              content: prompt
-            }],
-            max_tokens: 2048,
-            temperature: 0.7
-          }),
-          signal: AbortSignal.timeout(endpoint.timeout)
-        });
+  for (const model of models) {
+    try {
+      // 尝试不同的API端点
+      const apiUrls = getProxyConfig(env).openai.urls;
+      
+      for (const baseUrl of apiUrls) {
+        try {
+          const apiUrl = `${baseUrl}/chat/completions`;
+          console.log(`尝试OpenAI润色API: ${model} @ ${apiUrl}`);
+          
+          const response = await fetch(apiUrl, {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${apiKey}`,
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+              model: model,
+              messages: [{
+                role: 'user',
+                content: prompt
+              }],
+              max_tokens: 2048,
+              temperature: 0.7
+            })
+          });
 
-        if (!response.ok) {
-          const errorData = await response.text();
-          console.log(`润色 ${endpoint.name} - ${model} 失败: ${response.status} ${response.statusText}`);
-          throw new Error(`OpenAI API错误: ${response.status} ${response.statusText} - ${errorData}`);
+          if (!response.ok) {
+            const errorData = await response.text();
+            throw new Error(`OpenAI API错误: ${response.status} ${response.statusText} - ${errorData}`);
+          }
+
+          const data = await response.json();
+          const polishedText = data.choices[0]?.message?.content?.trim();
+          
+          if (!polishedText) {
+            throw new Error('OpenAI返回空结果');
+          }
+
+          console.log(`OpenAI润色成功: ${model} @ ${apiUrl}`);
+          return {
+            originalText: text,
+            translatedText: polishedText,
+            service: 'ChatGPT',
+            style: style,
+            error: false
+          };
+        } catch (urlError) {
+          console.log(`OpenAI润色API ${baseUrl} 失败:`, urlError.message);
+          if (baseUrl === apiUrls[apiUrls.length - 1]) {
+            throw urlError; // 如果是最后一个URL也失败了，抛出错误
+          }
         }
-
-        const data = await response.json();
-        const polishedText = data.choices[0]?.message?.content?.trim();
-        
-        if (!polishedText) {
-          throw new Error('OpenAI返回空结果');
-        }
-
-        console.log(`润色 ${endpoint.name} - ${model} 成功`);
-        return {
-          originalText: text,
-          translatedText: polishedText,
-          service: 'ChatGPT',
-          style: style,
-          error: false
-        };
-      } catch (error) {
-        lastError = error;
-        console.log(`润色 ${endpoint.name} - ${model} 失败:`, error.message);
-        continue;
+      }
+    } catch (error) {
+      lastError = error;
+      console.log(`OpenAI润色模型 ${model} 失败，尝试下一个模型:`, error.message);
+      if (model === models[models.length - 1]) {
+        // 如果是最后一个模型也失败了，抛出错误
+        throw lastError;
       }
     }
   }
-  
-  // 如果所有端点都失败，抛出最后一个错误
-  throw lastError;
 }
 
 // DeepSeek润色实现
@@ -953,27 +965,15 @@ async function callGeminiPolish(text, style, env) {
     prompt = `请对以下文本进行${style}风格的润色优化。请直接输出优化后的文本，不要包含任何解释：\n\n${text}`;
   }
 
-  // 智能网络路由：尝试多个区域端点
-  const endpoints = [
-    {
-      url: `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`,
-      name: 'Gemini 1.5',
-      timeout: 15000
-    },
-    {
-      url: `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
-      name: 'Gemini 2.0',
-      timeout: 20000
-    }
-  ];
+  // 尝试不同的API端点
+  const apiUrls = getProxyConfig(env).gemini.urls;
   
-  let lastError;
-  
-  for (const endpoint of endpoints) {
+  for (const baseUrl of apiUrls) {
     try {
-      console.log(`润色尝试 ${endpoint.name}`);
+      const apiUrl = `${baseUrl}/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+      console.log(`尝试Gemini润色API: ${apiUrl.replace(apiKey, 'API_KEY_HIDDEN')}`);
       
-      const response = await fetch(endpoint.url, {
+      const response = await fetch(apiUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
@@ -988,14 +988,11 @@ async function callGeminiPolish(text, style, env) {
             temperature: 0.7,
             maxOutputTokens: 2048
           }
-        }),
-        signal: AbortSignal.timeout(endpoint.timeout)
+        })
       });
 
       if (!response.ok) {
-        const errorData = await response.text();
-        console.log(`润色 ${endpoint.name} 失败: ${response.status} ${response.statusText}`);
-        throw new Error(`Gemini API错误: ${response.status} ${response.statusText} - ${errorData}`);
+        throw new Error(`Gemini API错误: ${response.status} ${response.statusText}`);
       }
 
       const data = await response.json();
@@ -1010,7 +1007,7 @@ async function callGeminiPolish(text, style, env) {
         throw new Error('Gemini返回空结果');
       }
 
-      console.log(`润色 ${endpoint.name} 成功`);
+      console.log(`Gemini润色成功: ${apiUrl.replace(apiKey, 'API_KEY_HIDDEN')}`);
       return {
         originalText: text,
         translatedText: polishedText,
@@ -1018,15 +1015,13 @@ async function callGeminiPolish(text, style, env) {
         style: style,
         error: false
       };
-    } catch (error) {
-      lastError = error;
-      console.log(`润色 ${endpoint.name} 失败:`, error.message);
-      continue;
+    } catch (urlError) {
+      console.log(`Gemini润色API ${baseUrl} 失败:`, urlError.message);
+      if (baseUrl === apiUrls[apiUrls.length - 1]) {
+        throw urlError; // 如果是最后一个URL也失败了，抛出错误
+      }
     }
   }
-  
-  // 如果所有端点都失败，抛出最后一个错误
-  throw lastError;
 }
 
 // Qwen润色实现
