@@ -486,7 +486,7 @@ async function translateWithGPT(text, sourceLang, targetLang) {
             console.time('OpenAI API请求时间');
             
             const response = await axios.post('https://api.openai.com/v1/chat/completions', {
-                model: 'gpt-3.5-turbo',
+                model: 'gpt-4o',
                 messages: [
                     {
                         role: 'system',
@@ -1688,7 +1688,7 @@ async function polishWithGPT(text, style = 'professional') {
             console.time('OpenAI润色API请求时间');
             
             const response = await axios.post('https://api.openai.com/v1/chat/completions', {
-                model: 'gpt-3.5-turbo',
+                model: 'gpt-4o',
                 messages: [
                     {
                         role: 'system',

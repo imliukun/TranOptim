@@ -355,6 +355,8 @@ async function callTranslationService(text, sourceLang, targetLang, service, env
       return await callQwenTranslation(text, sourceLang, targetLang, env);
     } else if (service === 'gemini') {
       return await callGeminiTranslation(text, sourceLang, targetLang, env);
+    } else if (service === 'doubao') {
+      return await callDoubaoTranslation(text, sourceLang, targetLang, env);
     } else {
       throw new Error(`不支持的翻译服务: ${service}`);
     }
@@ -487,23 +489,182 @@ function getLanguageName(langCode) {
   return langMap[langCode] || langCode;
 }
 
-// Qwen和Gemini的实现（简化版）
+// Qwen翻译实现
 async function callQwenTranslation(text, sourceLang, targetLang, env) {
-  // 暂时使用占位符实现
+  const apiKey = env.QWEN_API_KEY;
+  if (!apiKey) {
+    throw new Error('请配置 QWEN_API_KEY 环境变量');
+  }
+
+  const fromLangName = getLanguageName(sourceLang);
+  const toLangName = getLanguageName(targetLang);
+  
+  const prompt = sourceLang === 'auto' 
+    ? `请将以下文本翻译成${toLangName}，请直接输出翻译结果，不要包含任何解释或额外内容：\n\n${text}`
+    : `请将以下${fromLangName}文本翻译成${toLangName}，请直接输出翻译结果，不要包含任何解释或额外内容：\n\n${text}`;
+
+  const response = await fetch('https://api.siliconflow.cn/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${apiKey}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      model: 'Qwen/Qwen2.5-72B-Instruct',
+      messages: [{
+        role: 'user',
+        content: prompt
+      }],
+      max_tokens: 2048,
+      temperature: 0.3
+    })
+  });
+
+  if (!response.ok) {
+    throw new Error(`Qwen API错误: ${response.status} ${response.statusText}`);
+  }
+
+  const data = await response.json();
+  const translatedText = data.choices[0]?.message?.content?.trim();
+  
+  if (!translatedText) {
+    throw new Error('Qwen返回空结果');
+  }
+
   return {
     originalText: text,
-    translatedText: `[Qwen翻译服务暂未实现] ${text}`,
+    translatedText: translatedText,
     service: 'Qwen',
     error: false
   };
 }
 
+// Gemini翻译实现
 async function callGeminiTranslation(text, sourceLang, targetLang, env) {
-  // 暂时使用占位符实现
+  const apiKey = env.GEMINI_API_KEY;
+  if (!apiKey) {
+    throw new Error('请配置 GEMINI_API_KEY 环境变量');
+  }
+
+  const fromLangName = getLanguageName(sourceLang);
+  const toLangName = getLanguageName(targetLang);
+  
+  const prompt = sourceLang === 'auto' 
+    ? `请将以下文本翻译成${toLangName}，请直接输出翻译结果，不要包含任何解释或额外内容：\n\n${text}`
+    : `请将以下${fromLangName}文本翻译成${toLangName}，请直接输出翻译结果，不要包含任何解释或额外内容：\n\n${text}`;
+
+  const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      contents: [{
+        role: "user",
+        parts: [{
+          text: prompt
+        }]
+      }],
+      generationConfig: {
+        temperature: 0.2,
+        topK: 40,
+        topP: 0.95,
+        maxOutputTokens: 8192
+      },
+      safetySettings: [
+        {
+          category: "HARM_CATEGORY_HARASSMENT",
+          threshold: "BLOCK_MEDIUM_AND_ABOVE"
+        },
+        {
+          category: "HARM_CATEGORY_HATE_SPEECH",
+          threshold: "BLOCK_MEDIUM_AND_ABOVE"
+        },
+        {
+          category: "HARM_CATEGORY_SEXUALLY_EXPLICIT",
+          threshold: "BLOCK_MEDIUM_AND_ABOVE"
+        },
+        {
+          category: "HARM_CATEGORY_DANGEROUS_CONTENT",
+          threshold: "BLOCK_MEDIUM_AND_ABOVE"
+        }
+      ]
+    })
+  });
+
+  if (!response.ok) {
+    throw new Error(`Gemini API错误: ${response.status} ${response.statusText}`);
+  }
+
+  const data = await response.json();
+  
+  if (!data.candidates || !data.candidates.length) {
+    if (data.promptFeedback && data.promptFeedback.blockReason) {
+      throw new Error(`Gemini提示被拒绝: ${data.promptFeedback.blockReason}`);
+    }
+    throw new Error('Gemini返回异常响应');
+  }
+  
+  const translatedText = data.candidates[0].content.parts[0].text.trim();
+  
+  if (!translatedText) {
+    throw new Error('Gemini返回空结果');
+  }
+
   return {
     originalText: text,
-    translatedText: `[Gemini翻译服务暂未实现] ${text}`,
+    translatedText: translatedText,
     service: 'Gemini',
+    error: false
+  };
+}
+
+// 豆包翻译实现
+async function callDoubaoTranslation(text, sourceLang, targetLang, env) {
+  const apiKey = env.DOUBAO_API_KEY;
+  if (!apiKey) {
+    throw new Error('请配置 DOUBAO_API_KEY 环境变量');
+  }
+
+  const fromLangName = getLanguageName(sourceLang);
+  const toLangName = getLanguageName(targetLang);
+  
+  const prompt = sourceLang === 'auto' 
+    ? `请将以下文本翻译成${toLangName}，请直接输出翻译结果，不要包含任何解释或额外内容：\n\n${text}`
+    : `请将以下${fromLangName}文本翻译成${toLangName}，请直接输出翻译结果，不要包含任何解释或额外内容：\n\n${text}`;
+
+  const response = await fetch('https://ark.cn-beijing.volces.com/api/v3/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${apiKey}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      model: 'ep-20241226145057-zdgqx',
+      messages: [{
+        role: 'user',
+        content: prompt
+      }],
+      max_tokens: 2048,
+      temperature: 0.3
+    })
+  });
+
+  if (!response.ok) {
+    throw new Error(`豆包 API错误: ${response.status} ${response.statusText}`);
+  }
+
+  const data = await response.json();
+  const translatedText = data.choices[0]?.message?.content?.trim();
+  
+  if (!translatedText) {
+    throw new Error('豆包返回空结果');
+  }
+
+  return {
+    originalText: text,
+    translatedText: translatedText,
+    service: '豆包',
     error: false
   };
 }
@@ -553,6 +714,12 @@ async function callPolishAPI(text, style, service, env) {
     return await callOpenAIPolish(text, style, env);
   } else if (service === 'deepseek') {
     return await callDeepSeekPolish(text, style, env);
+  } else if (service === 'gemini') {
+    return await callGeminiPolish(text, style, env);
+  } else if (service === 'qwen') {
+    return await callQwenPolish(text, style, env);
+  } else if (service === 'doubao') {
+    return await callDoubaoPolish(text, style, env);
   } else {
     throw new Error(`不支持的润色服务: ${service}`);
   }
@@ -659,6 +826,172 @@ async function callDeepSeekPolish(text, style, env) {
     originalText: text,
     translatedText: polishedText,
     service: 'DeepSeek',
+    style: style,
+    error: false
+  };
+}
+
+// Gemini润色实现
+async function callGeminiPolish(text, style, env) {
+  const apiKey = env.GEMINI_API_KEY;
+  if (!apiKey) {
+    throw new Error('请配置 GEMINI_API_KEY 环境变量');
+  }
+
+  let prompt;
+  if (style === 'normal') {
+    prompt = `请对以下文本进行常规优化，保持原意的同时提升表达质量和流畅度。请直接输出优化后的文本，不要包含任何解释：\n\n${text}`;
+  } else if (style === 'rephrase') {
+    prompt = `请重新组织以下文本的表达方式，保持核心内容不变但使用不同的语言结构和词汇。请直接输出改写后的文本，不要包含任何解释：\n\n${text}`;
+  } else {
+    prompt = `请对以下文本进行${style}风格的润色优化。请直接输出优化后的文本，不要包含任何解释：\n\n${text}`;
+  }
+
+  const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      contents: [{
+        role: "user",
+        parts: [{
+          text: prompt
+        }]
+      }],
+      generationConfig: {
+        temperature: 0.7,
+        maxOutputTokens: 2048
+      }
+    })
+  });
+
+  if (!response.ok) {
+    throw new Error(`Gemini API错误: ${response.status} ${response.statusText}`);
+  }
+
+  const data = await response.json();
+  
+  if (!data.candidates || !data.candidates.length) {
+    throw new Error('Gemini返回异常响应');
+  }
+  
+  const polishedText = data.candidates[0].content.parts[0].text.trim();
+  
+  if (!polishedText) {
+    throw new Error('Gemini返回空结果');
+  }
+
+  return {
+    originalText: text,
+    translatedText: polishedText,
+    service: 'Gemini',
+    style: style,
+    error: false
+  };
+}
+
+// Qwen润色实现
+async function callQwenPolish(text, style, env) {
+  const apiKey = env.QWEN_API_KEY;
+  if (!apiKey) {
+    throw new Error('请配置 QWEN_API_KEY 环境变量');
+  }
+
+  let prompt;
+  if (style === 'normal') {
+    prompt = `请对以下文本进行常规优化，保持原意的同时提升表达质量和流畅度。请直接输出优化后的文本，不要包含任何解释：\n\n${text}`;
+  } else if (style === 'rephrase') {
+    prompt = `请重新组织以下文本的表达方式，保持核心内容不变但使用不同的语言结构和词汇。请直接输出改写后的文本，不要包含任何解释：\n\n${text}`;
+  } else {
+    prompt = `请对以下文本进行${style}风格的润色优化。请直接输出优化后的文本，不要包含任何解释：\n\n${text}`;
+  }
+
+  const response = await fetch('https://api.siliconflow.cn/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${apiKey}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      model: 'Qwen/Qwen2.5-72B-Instruct',
+      messages: [{
+        role: 'user',
+        content: prompt
+      }],
+      max_tokens: 2048,
+      temperature: 0.7
+    })
+  });
+
+  if (!response.ok) {
+    throw new Error(`Qwen API错误: ${response.status} ${response.statusText}`);
+  }
+
+  const data = await response.json();
+  const polishedText = data.choices[0]?.message?.content?.trim();
+  
+  if (!polishedText) {
+    throw new Error('Qwen返回空结果');
+  }
+
+  return {
+    originalText: text,
+    translatedText: polishedText,
+    service: 'Qwen',
+    style: style,
+    error: false
+  };
+}
+
+// 豆包润色实现
+async function callDoubaoPolish(text, style, env) {
+  const apiKey = env.DOUBAO_API_KEY;
+  if (!apiKey) {
+    throw new Error('请配置 DOUBAO_API_KEY 环境变量');
+  }
+
+  let prompt;
+  if (style === 'normal') {
+    prompt = `请对以下文本进行常规优化，保持原意的同时提升表达质量和流畅度。请直接输出优化后的文本，不要包含任何解释：\n\n${text}`;
+  } else if (style === 'rephrase') {
+    prompt = `请重新组织以下文本的表达方式，保持核心内容不变但使用不同的语言结构和词汇。请直接输出改写后的文本，不要包含任何解释：\n\n${text}`;
+  } else {
+    prompt = `请对以下文本进行${style}风格的润色优化。请直接输出优化后的文本，不要包含任何解释：\n\n${text}`;
+  }
+
+  const response = await fetch('https://ark.cn-beijing.volces.com/api/v3/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${apiKey}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      model: 'ep-20241226145057-zdgqx',
+      messages: [{
+        role: 'user',
+        content: prompt
+      }],
+      max_tokens: 2048,
+      temperature: 0.7
+    })
+  });
+
+  if (!response.ok) {
+    throw new Error(`豆包 API错误: ${response.status} ${response.statusText}`);
+  }
+
+  const data = await response.json();
+  const polishedText = data.choices[0]?.message?.content?.trim();
+  
+  if (!polishedText) {
+    throw new Error('豆包返回空结果');
+  }
+
+  return {
+    originalText: text,
+    translatedText: polishedText,
+    service: '豆包',
     style: style,
     error: false
   };
