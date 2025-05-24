@@ -1,3 +1,17 @@
+/**
+ * TranOptim Cloudflare Functions API
+ * 
+ * 网络访问说明:
+ * - DeepSeek, Qwen: 通过SiliconFlow平台，全球可访问
+ * - 豆包: 字节跳动服务，国内直接可访问
+ * - OpenAI, Gemini: 在某些地区有访问限制
+ * 
+ * 解决方案:
+ * 1. 设置 ENABLE_OPENAI_IN_PRODUCTION=true 启用OpenAI（需要在可访问地区）
+ * 2. 设置 ENABLE_GEMINI_IN_PRODUCTION=true 启用Gemini（需要在可访问地区）
+ * 3. 配置 OPENAI_API_PROXY 和 GEMINI_API_PROXY 使用代理服务
+ */
+
 // TranOptim API for Cloudflare Pages Functions
 
 // 认证配置
@@ -364,6 +378,21 @@ async function callTranslationService(text, sourceLang, targetLang, service, env
     console.error(`${service}翻译失败:`, error);
     console.error(`错误详情 - 服务: ${service}, 状态: ${error.status || 'unknown'}, 消息: ${error.message}`);
     
+    // 智能降级: 如果OpenAI或Gemini不可用，自动尝试可用的服务
+    if ((service === 'gpt' || service === 'gemini') && error.message.includes('当前地区不可用')) {
+      console.log(`${service}服务不可用，尝试使用DeepSeek作为替代`);
+      try {
+        const fallbackResult = await callDeepSeekTranslation(text, sourceLang, targetLang, env);
+        // 标记这是降级结果
+        fallbackResult.service = `${fallbackResult.service} (${service}服务降级)`;
+        fallbackResult.fallback = true;
+        return fallbackResult;
+      } catch (fallbackError) {
+        console.error('降级到DeepSeek也失败:', fallbackError);
+        // 继续原有的错误处理逻辑
+      }
+    }
+    
     // 根据错误类型提供更详细的错误信息
     let errorMessage = error.message;
     if (error.message.includes('403')) {
@@ -389,6 +418,11 @@ async function callTranslationService(text, sourceLang, targetLang, service, env
 
 // OpenAI翻译实现
 async function callOpenAITranslation(text, sourceLang, targetLang, env) {
+  // 在Cloudflare环境中检查是否可以访问OpenAI
+  if (!env.ENABLE_OPENAI_IN_PRODUCTION) {
+    throw new Error('OpenAI服务在当前地区不可用，请使用DeepSeek、Qwen或豆包服务');
+  }
+  
   const apiKey = env.OPENAI_API_KEY;
   if (!apiKey) {
     throw new Error('请配置 OPENAI_API_KEY 环境变量');
@@ -573,6 +607,11 @@ async function callQwenTranslation(text, sourceLang, targetLang, env) {
 
 // Gemini翻译实现
 async function callGeminiTranslation(text, sourceLang, targetLang, env) {
+  // 在Cloudflare环境中检查是否可以访问Gemini
+  if (!env.ENABLE_GEMINI_IN_PRODUCTION) {
+    throw new Error('Gemini服务在当前地区不可用，请使用DeepSeek、Qwen或豆包服务');
+  }
+  
   const apiKey = env.GEMINI_API_KEY;
   if (!apiKey) {
     throw new Error('请配置 GEMINI_API_KEY 环境变量');
@@ -758,6 +797,11 @@ async function callPolishAPI(text, style, service, env) {
 
 // OpenAI润色实现
 async function callOpenAIPolish(text, style, env) {
+  // 在Cloudflare环境中检查是否可以访问OpenAI
+  if (!env.ENABLE_OPENAI_IN_PRODUCTION) {
+    throw new Error('OpenAI润色服务在当前地区不可用，请使用DeepSeek、Qwen或豆包服务');
+  }
+  
   const apiKey = env.OPENAI_API_KEY;
   if (!apiKey) {
     throw new Error('请配置 OPENAI_API_KEY 环境变量');
@@ -880,6 +924,11 @@ async function callDeepSeekPolish(text, style, env) {
 
 // Gemini润色实现
 async function callGeminiPolish(text, style, env) {
+  // 在Cloudflare环境中检查是否可以访问Gemini
+  if (!env.ENABLE_GEMINI_IN_PRODUCTION) {
+    throw new Error('Gemini润色服务在当前地区不可用，请使用DeepSeek、Qwen或豆包服务');
+  }
+  
   const apiKey = env.GEMINI_API_KEY;
   if (!apiKey) {
     throw new Error('请配置 GEMINI_API_KEY 环境变量');
