@@ -362,9 +362,25 @@ async function callTranslationService(text, sourceLang, targetLang, service, env
     }
   } catch (error) {
     console.error(`${service}翻译失败:`, error);
+    console.error(`错误详情 - 服务: ${service}, 状态: ${error.status || 'unknown'}, 消息: ${error.message}`);
+    
+    // 根据错误类型提供更详细的错误信息
+    let errorMessage = error.message;
+    if (error.message.includes('403')) {
+      errorMessage = `${service} API密钥无效或没有权限访问所请求的模型`;
+    } else if (error.message.includes('400')) {
+      errorMessage = `${service} API请求格式错误，请检查配置`;
+    } else if (error.message.includes('404')) {
+      errorMessage = `${service} API端点不存在或模型不可用`;
+    } else if (error.message.includes('429')) {
+      errorMessage = `${service} API请求频率超限，请稍后重试`;
+    } else if (error.message.includes('500')) {
+      errorMessage = `${service} 服务器内部错误，请稍后重试`;
+    }
+    
     return {
       originalText: text,
-      translatedText: `翻译失败: ${error.message}`,
+      translatedText: `翻译失败: ${errorMessage}`,
       service: service === 'gpt' ? 'ChatGPT' : service.toUpperCase(),
       error: true
     };
@@ -385,40 +401,56 @@ async function callOpenAITranslation(text, sourceLang, targetLang, env) {
     ? `请将以下文本翻译成${toLangName}，请直接输出翻译结果，不要包含任何解释或额外内容：\n\n${text}`
     : `请将以下${fromLangName}文本翻译成${toLangName}，请直接输出翻译结果，不要包含任何解释或额外内容：\n\n${text}`;
 
-  const response = await fetch('https://api.openai.com/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${apiKey}`,
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify({
-      model: 'gpt-4o',
-      messages: [{
-        role: 'user',
-        content: prompt
-      }],
-      max_tokens: 2048,
-      temperature: 0.3
-    })
-  });
-
-  if (!response.ok) {
-    throw new Error(`OpenAI API错误: ${response.status} ${response.statusText}`);
-  }
-
-  const data = await response.json();
-  const translatedText = data.choices[0]?.message?.content?.trim();
+  // 尝试使用gpt-4o，如果失败则降级到gpt-3.5-turbo
+  const models = ['gpt-4o', 'gpt-3.5-turbo'];
+  let lastError;
   
-  if (!translatedText) {
-    throw new Error('OpenAI返回空结果');
-  }
+  for (const model of models) {
+    try {
+      const response = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${apiKey}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          model: model,
+          messages: [{
+            role: 'user',
+            content: prompt
+          }],
+          max_tokens: 2048,
+          temperature: 0.3
+        })
+      });
 
-  return {
-    originalText: text,
-    translatedText: translatedText,
-    service: 'ChatGPT',
-    error: false
-  };
+      if (!response.ok) {
+        const errorData = await response.text();
+        throw new Error(`OpenAI API错误: ${response.status} ${response.statusText} - ${errorData}`);
+      }
+
+      const data = await response.json();
+      const translatedText = data.choices[0]?.message?.content?.trim();
+      
+      if (!translatedText) {
+        throw new Error('OpenAI返回空结果');
+      }
+
+      return {
+        originalText: text,
+        translatedText: translatedText,
+        service: 'ChatGPT',
+        error: false
+      };
+    } catch (error) {
+      lastError = error;
+      console.log(`OpenAI模型 ${model} 失败，尝试下一个模型:`, error.message);
+      if (model === models[models.length - 1]) {
+        // 如果是最后一个模型也失败了，抛出错误
+        throw lastError;
+      }
+    }
+  }
 }
 
 // DeepSeek翻译实现
@@ -560,7 +592,6 @@ async function callGeminiTranslation(text, sourceLang, targetLang, env) {
     },
     body: JSON.stringify({
       contents: [{
-        role: "user",
         parts: [{
           text: prompt
         }]
@@ -640,13 +671,13 @@ async function callDoubaoTranslation(text, sourceLang, targetLang, env) {
       'Content-Type': 'application/json'
     },
     body: JSON.stringify({
-      model: 'ep-20241226145057-zdgqx',
+      model: 'doubao-1-5-pro-32k-250115',
       messages: [{
         role: 'user',
         content: prompt
       }],
       max_tokens: 2048,
-      temperature: 0.3
+      temperature: 0.7
     })
   });
 
@@ -741,41 +772,57 @@ async function callOpenAIPolish(text, style, env) {
     prompt = `请对以下文本进行${style}风格的润色优化。请直接输出优化后的文本，不要包含任何解释：\n\n${text}`;
   }
 
-  const response = await fetch('https://api.openai.com/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${apiKey}`,
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify({
-      model: 'gpt-4o',
-      messages: [{
-        role: 'user',
-        content: prompt
-      }],
-      max_tokens: 2048,
-      temperature: 0.7
-    })
-  });
-
-  if (!response.ok) {
-    throw new Error(`OpenAI API错误: ${response.status} ${response.statusText}`);
-  }
-
-  const data = await response.json();
-  const polishedText = data.choices[0]?.message?.content?.trim();
+  // 尝试使用gpt-4o，如果失败则降级到gpt-3.5-turbo
+  const models = ['gpt-4o', 'gpt-3.5-turbo'];
+  let lastError;
   
-  if (!polishedText) {
-    throw new Error('OpenAI返回空结果');
-  }
+  for (const model of models) {
+    try {
+      const response = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${apiKey}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          model: model,
+          messages: [{
+            role: 'user',
+            content: prompt
+          }],
+          max_tokens: 2048,
+          temperature: 0.7
+        })
+      });
 
-  return {
-    originalText: text,
-    translatedText: polishedText,
-    service: 'ChatGPT',
-    style: style,
-    error: false
-  };
+      if (!response.ok) {
+        const errorData = await response.text();
+        throw new Error(`OpenAI API错误: ${response.status} ${response.statusText} - ${errorData}`);
+      }
+
+      const data = await response.json();
+      const polishedText = data.choices[0]?.message?.content?.trim();
+      
+      if (!polishedText) {
+        throw new Error('OpenAI返回空结果');
+      }
+
+      return {
+        originalText: text,
+        translatedText: polishedText,
+        service: 'ChatGPT',
+        style: style,
+        error: false
+      };
+    } catch (error) {
+      lastError = error;
+      console.log(`OpenAI润色模型 ${model} 失败，尝试下一个模型:`, error.message);
+      if (model === models[models.length - 1]) {
+        // 如果是最后一个模型也失败了，抛出错误
+        throw lastError;
+      }
+    }
+  }
 }
 
 // DeepSeek润色实现
@@ -854,7 +901,6 @@ async function callGeminiPolish(text, style, env) {
     },
     body: JSON.stringify({
       contents: [{
-        role: "user",
         parts: [{
           text: prompt
         }]
@@ -967,7 +1013,7 @@ async function callDoubaoPolish(text, style, env) {
       'Content-Type': 'application/json'
     },
     body: JSON.stringify({
-      model: 'ep-20241226145057-zdgqx',
+      model: 'doubao-1-5-pro-32k-250115',
       messages: [{
         role: 'user',
         content: prompt
