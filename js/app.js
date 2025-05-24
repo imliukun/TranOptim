@@ -17,6 +17,7 @@ let translateBtn = null;
 let polishBtn = null;
 let uploadImageBtn = null;
 let imageUpload = null;
+let conversationList = null;
 
 // 输入框自动高度调整函数 - 移到全局作用域
 function autoResizeInput() {
@@ -119,10 +120,346 @@ function escapeHtml(text) {
     return div.innerHTML;
 }
 
-// 保存对话消息函数 - 移到全局作用域
+// 保存对话消息函数 - 完善对话管理功能
 function saveMessageToCurrentConversation(message) {
-    // 这个函数需要对话管理功能，暂时留空
-    console.log('保存消息到对话:', message);
+    if (!currentConversationId) {
+        // 如果没有当前对话，创建一个新对话
+        createNewConversation();
+    }
+    
+    // 查找当前对话
+    const conversationIndex = conversations.findIndex(conv => conv.id === currentConversationId);
+    if (conversationIndex === -1) {
+        console.error('当前对话不存在，创建新对话');
+        createNewConversation();
+        return;
+    }
+    
+    // 添加消息
+    conversations[conversationIndex].messages.push(message);
+    
+    // 更新对话的最后修改时间
+    conversations[conversationIndex].updatedAt = new Date().toISOString();
+    
+    // 如果是第一条用户消息，更新对话标题
+    if (message.type === 'user' && conversations[conversationIndex].messages.length === 1) {
+        let title = message.content || '';
+        if (title.length > 20) {
+            title = title.substring(0, 20) + '...';
+        }
+        if (!title && message.hasImage) {
+            title = '[图片对话]';
+        }
+        if (title) {
+            conversations[conversationIndex].title = title;
+        }
+    }
+    
+    // 保存到本地存储
+    saveConversationsToStorage();
+    
+    // 更新UI
+    renderConversationList();
+}
+
+// 对话管理相关函数
+function initConversationManager() {
+    // 从本地存储加载对话历史
+    loadConversationsFromStorage();
+    
+    // 如果没有对话，创建一个新对话
+    if (conversations.length === 0) {
+        createNewConversation();
+    } else {
+        // 设置第一个对话为当前对话
+        currentConversationId = conversations[0].id;
+    }
+    
+    // 渲染对话列表
+    renderConversationList();
+}
+
+function loadConversationsFromStorage() {
+    const savedConversations = localStorage.getItem('tranoptim-conversations');
+    if (savedConversations) {
+        try {
+            conversations = JSON.parse(savedConversations);
+        } catch (e) {
+            console.error('加载对话历史失败:', e);
+            conversations = [];
+        }
+    }
+}
+
+function saveConversationsToStorage() {
+    localStorage.setItem('tranoptim-conversations', JSON.stringify(conversations));
+}
+
+function createNewConversation() {
+    // 保存当前模型选择
+    saveModelSelections();
+    
+    // 生成唯一ID
+    const newId = 'conv-' + Date.now().toString();
+    const newConversation = {
+        id: newId,
+        title: '新对话 ' + new Date().toLocaleString('zh-CN', {month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'}),
+        messages: [],
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+    };
+    
+    // 添加到对话列表的开头
+    conversations.unshift(newConversation);
+    
+    // 保存到本地存储
+    saveConversationsToStorage();
+    
+    // 设置为当前对话
+    currentConversationId = newId;
+    
+    // 更新UI
+    renderConversationList();
+    
+    // 清空聊天区域并显示欢迎消息
+    if (chatMessages) {
+        chatMessages.innerHTML = `
+            <div class="message system">
+                <div class="message-content">
+                    <p>👋 欢迎使用 TranOptim 智能翻译与润色工具！</p>
+                    <p>您可以直接输入文本进行翻译，或者上传图片进行图像文本翻译。</p>
+                </div>
+            </div>
+        `;
+    }
+    
+    // 重置消息计数器
+    messageCounter = 0;
+    
+    // 重新加载模型选择
+    loadModelSelections();
+    
+    return newId;
+}
+
+function loadConversation(conversationId) {
+    const conversation = conversations.find(conv => conv.id === conversationId);
+    if (!conversation) return;
+    
+    currentConversationId = conversationId;
+    
+    // 清空聊天区域
+    if (chatMessages) {
+        chatMessages.innerHTML = `
+            <div class="message system">
+                <div class="message-content">
+                    <p>👋 欢迎使用 TranOptim 智能翻译与润色工具！</p>
+                    <p>您可以直接输入文本进行翻译，或者上传图片进行图像文本翻译。</p>
+                </div>
+            </div>
+        `;
+        
+        // 重新显示历史消息
+        conversation.messages.forEach(message => {
+            if (message.type === 'user') {
+                addUserMessage(message.content, null, false);
+            } else if (message.type === 'ai') {
+                if (message.translationResult) {
+                    addAITranslationMessage(message.translationResult, false);
+                } else if (message.polishResult) {
+                    addAIPolishMessage(message.polishResult, false);
+                }
+            }
+        });
+    }
+    
+    // 更新对话列表的活动状态
+    renderConversationList();
+}
+
+function renderConversationList() {
+    if (!conversationList) return;
+    
+    conversationList.innerHTML = '';
+    
+    conversations.forEach(conv => {
+        const item = document.createElement('div');
+        item.className = 'conversation-item';
+        if (conv.id === currentConversationId) {
+            item.classList.add('active');
+        }
+        
+        item.innerHTML = `
+            <div class="conversation-icon">
+                <i class="fas fa-comments"></i>
+            </div>
+            <div class="conversation-content">
+                <div class="conversation-title">${conv.title}</div>
+                <div class="conversation-time">${getRelativeTime(conv.updatedAt)}</div>
+            </div>
+            <div class="conversation-actions">
+                <button class="conversation-delete" data-id="${conv.id}" title="删除对话">
+                    <i class="fas fa-trash"></i>
+                </button>
+            </div>
+        `;
+        
+        // 点击加载对话
+        item.addEventListener('click', function(e) {
+            if (e.target.closest('.conversation-delete')) return;
+            loadConversation(conv.id);
+        });
+        
+        // 删除对话
+        const deleteBtn = item.querySelector('.conversation-delete');
+        deleteBtn.addEventListener('click', function(e) {
+            e.stopPropagation();
+            if (confirm('确定要删除这个对话吗？')) {
+                deleteConversation(conv.id);
+            }
+        });
+        
+        conversationList.appendChild(item);
+    });
+}
+
+function deleteConversation(conversationId) {
+    // 查找对话索引
+    const conversationIndex = conversations.findIndex(conv => conv.id === conversationId);
+    if (conversationIndex === -1) return;
+    
+    // 删除对话
+    conversations.splice(conversationIndex, 1);
+    
+    // 保存到本地存储
+    saveConversationsToStorage();
+    
+    // 如果删除的是当前对话，加载另一个对话或创建新对话
+    if (conversationId === currentConversationId) {
+        if (conversations.length > 0) {
+            loadConversation(conversations[0].id);
+        } else {
+            createNewConversation();
+        }
+    }
+    
+    // 更新UI
+    renderConversationList();
+    
+    showNotification('对话已删除');
+}
+
+function getRelativeTime(timestamp) {
+    const now = new Date();
+    const time = new Date(timestamp);
+    const diffMs = now - time;
+    const diffMinutes = Math.floor(diffMs / (1000 * 60));
+    const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+    
+    if (diffDays > 0) {
+        return `${diffDays}天前`;
+    } else if (diffHours > 0) {
+        return `${diffHours}小时前`;
+    } else if (diffMinutes > 0) {
+        return `${diffMinutes}分钟前`;
+    } else {
+        return '刚刚';
+    }
+}
+
+// 处理输入框图片粘贴功能
+function setupImagePasteSupport() {
+    if (!chatInput) return;
+    
+    chatInput.addEventListener('paste', function(e) {
+        const items = e.clipboardData?.items;
+        if (!items) return;
+        
+        // 检查剪贴板中是否有图片
+        for (let i = 0; i < items.length; i++) {
+            const item = items[i];
+            if (item.type.indexOf('image') !== -1) {
+                e.preventDefault();
+                
+                const file = item.getAsFile();
+                if (file) {
+                    // 设置当前图片文件
+                    currentImageFile = file;
+                    console.log('图片粘贴成功，设置currentImageFile:', !!currentImageFile, file.name);
+                    
+                    // 更新上传按钮状态
+                    if (uploadImageBtn) {
+                        uploadImageBtn.innerHTML = '<i class="fas fa-image"></i> 已粘贴图片';
+                        uploadImageBtn.style.backgroundColor = '#28a745';
+                    }
+                    
+                    // 在输入框中显示提示
+                    const currentText = chatInput.value;
+                    if (currentText && !currentText.includes('[图片已粘贴]')) {
+                        chatInput.value = currentText + ' [图片已粘贴]';
+                    } else if (!currentText) {
+                        chatInput.value = '[图片已粘贴]';
+                    }
+                    
+                    // 添加图片状态类
+                    chatInput.classList.add('has-image');
+                    
+                    // 触发高度调整
+                    setTimeout(autoResizeInput, 0);
+                    
+                    showNotification('图片已粘贴，点击翻译按钮开始处理');
+                }
+                break;
+            }
+        }
+    });
+    
+    // 添加拖拽支持
+    chatInput.addEventListener('dragover', function(e) {
+        e.preventDefault();
+        chatInput.style.backgroundColor = '#f0f8ff';
+    });
+    
+    chatInput.addEventListener('dragleave', function(e) {
+        e.preventDefault();
+        chatInput.style.backgroundColor = '';
+    });
+    
+    chatInput.addEventListener('drop', function(e) {
+        e.preventDefault();
+        chatInput.style.backgroundColor = '';
+        
+        const files = e.dataTransfer.files;
+        if (files.length > 0 && files[0].type.startsWith('image/')) {
+            const file = files[0];
+            
+            // 设置当前图片文件
+            currentImageFile = file;
+            
+            // 更新上传按钮状态
+            if (uploadImageBtn) {
+                uploadImageBtn.innerHTML = '<i class="fas fa-image"></i> ' + file.name.substring(0, 10) + '...';
+                uploadImageBtn.style.backgroundColor = '#28a745';
+            }
+            
+            // 在输入框中显示提示
+            const currentText = chatInput.value;
+            if (currentText && !currentText.includes('[图片已拖拽]')) {
+                chatInput.value = currentText + ' [图片已拖拽]';
+            } else if (!currentText) {
+                chatInput.value = '[图片已拖拽]';
+            }
+            
+            // 添加图片状态类
+            chatInput.classList.add('has-image');
+            
+            // 触发高度调整
+            setTimeout(autoResizeInput, 0);
+            
+            showNotification('图片已选择: ' + file.name);
+        }
+    });
 }
 
 // 添加加载消息函数 - 移到全局作用域
@@ -194,7 +531,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const targetLang = document.getElementById('targetLanguage');
     const newChatBtn = document.getElementById('newChatBtn');
     const clearChatsBtn = document.getElementById('clearChatsBtn');
-    const conversationList = document.getElementById('conversationList');
+    conversationList = document.getElementById('conversationList');
     
     // 获取设置相关元素
     const translateSettingsBtn = document.getElementById('translateSettingsBtn');
@@ -625,6 +962,12 @@ document.addEventListener('DOMContentLoaded', function() {
             const inputText = chatInput ? chatInput.value.trim() : '';
             const hasImage = currentImageFile !== null;
             
+            console.log('翻译检查状态:', {
+                inputText: inputText.substring(0, 20) + '...',
+                hasImage: hasImage,
+                currentImageFile: !!currentImageFile
+            });
+            
             // 检查是否有输入
             if (!inputText && !hasImage) {
                 showNotification('请输入文本或上传图片');
@@ -648,10 +991,12 @@ document.addEventListener('DOMContentLoaded', function() {
             // 添加加载消息
             const loadingMessageId = addLoadingMessage();
             
-            // 清空输入框和图片
-            if (chatInput) chatInput.value = '';
+            // 保存当前图片文件（在清空状态之前）
             const savedImageFile = currentImageFile;
-            currentImageFile = null;
+            
+            // 清空输入框和图片状态
+            if (chatInput) chatInput.value = '';
+            clearImageState();
             
             try {
                 let result;
@@ -720,8 +1065,18 @@ document.addEventListener('DOMContentLoaded', function() {
                 // 移除加载消息
                 removeLoadingMessage(loadingMessageId);
                 
-                // 添加错误消息
-                addErrorMessage(error.message || '翻译失败，请稍后再试');
+                // 使用友好的错误处理
+                if (window.TranOptimErrorHandler) {
+                    const context = { 
+                        type: hasImage ? 'image' : 'text',
+                        service: selectedService.value,
+                        operation: 'translate'
+                    };
+                    window.TranOptimErrorHandler.showUserFriendlyError(error, context);
+                } else {
+                    // 添加错误消息
+                    addErrorMessage(error.message || '翻译失败，请稍后再试');
+                }
                 
                 // 滚动到底部
                 scrollToBottom();
@@ -806,8 +1161,18 @@ document.addEventListener('DOMContentLoaded', function() {
                 // 移除加载消息
                 removeLoadingMessage(loadingMessageId);
                 
-                // 添加错误消息
-                addErrorMessage('润色失败: ' + error.message);
+                // 使用友好的错误处理
+                if (window.TranOptimErrorHandler) {
+                    const context = { 
+                        type: 'text',
+                        service: selectedService.value,
+                        operation: 'polish'
+                    };
+                    window.TranOptimErrorHandler.showUserFriendlyError(error, context);
+                } else {
+                    // 添加错误消息
+                    addErrorMessage('润色失败: ' + error.message);
+                }
                 
                 // 滚动到底部
                 scrollToBottom();
@@ -820,32 +1185,8 @@ document.addEventListener('DOMContentLoaded', function() {
         newChatBtn.addEventListener('click', () => {
             console.log('点击新对话按钮 - 聊天界面版本');
             
-            // 保存当前模型选择
-            saveModelSelections();
-            
-            // 清空聊天区域
-            if (chatMessages) {
-                chatMessages.innerHTML = `
-                    <div class="message system">
-                        <div class="message-content">
-                            <p>👋 欢迎使用 TranOptim 智能翻译与润色工具！</p>
-                            <p>您可以直接输入文本进行翻译，或者上传图片进行图像文本翻译。</p>
-                        </div>
-                    </div>
-                `;
-            }
-            
-            // 清空输入框
-            if (chatInput) {
-                chatInput.value = '';
-                setTimeout(autoResizeInput, 0);
-            }
-            
-            // 重置消息计数器
-            messageCounter = 0;
-            
-            // 重新加载模型选择
-            loadModelSelections();
+            // 创建新对话
+            createNewConversation();
             
             showNotification('已创建新对话');
         });
@@ -855,36 +1196,25 @@ document.addEventListener('DOMContentLoaded', function() {
     if (clearChatsBtn) {
         clearChatsBtn.addEventListener('click', () => {
             if (confirm('确定要清空所有对话记录吗？此操作不可恢复。')) {
-                // 清空聊天区域
-                if (chatMessages) {
-                    chatMessages.innerHTML = `
-                        <div class="message system">
-                            <div class="message-content">
-                                <p>👋 欢迎使用 TranOptim 智能翻译与润色工具！</p>
-                                <p>您可以直接输入文本进行翻译，或者上传图片进行图像文本翻译。</p>
-                            </div>
-                        </div>
-                    `;
-                }
-                
-                // 清空输入框
-                if (chatInput) {
-                    chatInput.value = '';
-                    setTimeout(autoResizeInput, 0);
-                }
-                
-                // 重置状态
-                messageCounter = 0;
+                // 清空对话数组
                 conversations = [];
-                currentConversationId = null;
                 
                 // 清空本地存储
                 localStorage.removeItem('tranoptim-conversations');
+                
+                // 创建新对话
+                createNewConversation();
                 
                 showNotification('所有对话记录已清空');
             }
         });
     }
+    
+    // 初始化对话管理器
+    initConversationManager();
+    
+    // 初始化图片粘贴支持
+    setupImagePasteSupport();
     
     // 处理翻译响应
     function handleTranslationResponse(data, activeTab) {
@@ -1952,23 +2282,74 @@ function addUserMessage(content, image = null, saveToHistory = true) {
     const contentElement = document.createElement('div');
     contentElement.className = 'message-content';
     
-    const textElement = document.createElement('p');
-    textElement.textContent = content || '[图片翻译请求]';
-    contentElement.appendChild(textElement);
+    // 处理图片消息
+    if (image) {
+        const imageContainer = document.createElement('div');
+        imageContainer.className = 'user-image-container';
+        
+        const imageElement = document.createElement('img');
+        imageElement.className = 'user-image';
+        imageElement.src = URL.createObjectURL(image);
+        imageElement.alt = '用户上传的图片';
+        
+        imageContainer.appendChild(imageElement);
+        contentElement.appendChild(imageContainer);
+        
+        if (content && content.trim() && !content.includes('[图片')) {
+            const textElement = document.createElement('p');
+            textElement.className = 'user-text image-caption';
+            textElement.textContent = content;
+            contentElement.appendChild(textElement);
+        }
+    } else {
+        // 清理内容中的图片标识
+        let cleanContent = content || '';
+        cleanContent = cleanContent.replace(/\s*\[图片已粘贴\]\s*/g, '').trim();
+        cleanContent = cleanContent.replace(/\s*\[图片已拖拽\]\s*/g, '').trim();
+        
+        const textElement = document.createElement('p');
+        textElement.textContent = cleanContent || '[文本翻译请求]';
+        contentElement.appendChild(textElement);
+    }
     
     messageElement.appendChild(contentElement);
     chatMessages.appendChild(messageElement);
     
     if (saveToHistory) {
+        // 保存时也清理内容
+        let cleanContent = content || '';
+        cleanContent = cleanContent.replace(/\s*\[图片已粘贴\]\s*/g, '').trim();
+        cleanContent = cleanContent.replace(/\s*\[图片已拖拽\]\s*/g, '').trim();
+        
         saveMessageToCurrentConversation({
             type: 'user',
-            content: content || '[图片]',
+            content: cleanContent || (image ? '[图片]' : '[文本]'),
             hasImage: !!image,
             time: new Date().toISOString()
         });
     }
     
     scrollToBottom();
+}
+
+// 清除图片状态的辅助函数
+function clearImageState() {
+    console.log('清除图片状态，当前图片文件:', !!currentImageFile);
+    currentImageFile = null;
+    
+    if (uploadImageBtn) {
+        uploadImageBtn.innerHTML = '<i class="fas fa-image"></i> 图片';
+        uploadImageBtn.style.backgroundColor = '';
+    }
+    
+    if (chatInput) {
+        // 清理输入框中的图片标识
+        let cleanText = chatInput.value.replace(/\s*\[图片已粘贴\]\s*/g, '').trim();
+        cleanText = cleanText.replace(/\s*\[图片已拖拽\]\s*/g, '').trim();
+        chatInput.value = cleanText;
+        chatInput.classList.remove('has-image');
+        setTimeout(autoResizeInput, 0);
+    }
 }
 
 function addAITranslationMessage(result, saveToHistory = true) {
@@ -1988,37 +2369,93 @@ function addAITranslationMessage(result, saveToHistory = true) {
     serviceInfo.innerHTML = `<span>🤖 由 ${result.service || 'AI'} 提供的翻译</span>`;
     contentDiv.appendChild(serviceInfo);
     
-    // OCR结果（如果有）
-    if (result.ocrText && result.ocrText.trim() !== '') {
+    // 判断是否为图片翻译 - 修复判断逻辑
+    // 通过检查当前对话的最后一条用户消息是否包含图片来判断
+    let isImageTranslation = false;
+    if (currentConversationId && conversations.length > 0) {
+        const currentConv = conversations.find(conv => conv.id === currentConversationId);
+        if (currentConv && currentConv.messages.length > 0) {
+            // 找到最后一条用户消息
+            const lastUserMessage = currentConv.messages
+                .slice()
+                .reverse()
+                .find(msg => msg.type === 'user');
+            
+            // 如果最后一条用户消息有图片，则当前翻译结果是图片翻译
+            isImageTranslation = !!(lastUserMessage && lastUserMessage.hasImage);
+        }
+    }
+    
+    if (isImageTranslation) {
+        // 图片翻译：显示OCR识别结果
         const ocrDiv = document.createElement('div');
-        ocrDiv.className = 'ocr-result';
+        ocrDiv.className = 'ocr-result-section';
         ocrDiv.innerHTML = `
-            <div class="result-title"><i class="fas fa-file-alt"></i> OCR识别结果</div>
-            <div class="ocr-text">${result.ocrText}</div>
+            <div class="section-header">
+                <div class="section-title"><i class="fas fa-search"></i> OCR识别结果</div>
+                <div class="section-actions">
+                    <button class="section-btn copy-ocr-btn" title="复制识别文本">
+                        <i class="fas fa-copy"></i> 复制识别文本
+                    </button>
+                </div>
+            </div>
+            <div class="section-content ocr-text">${escapeHtml(result.originalText)}</div>
         `;
         contentDiv.appendChild(ocrDiv);
     }
     
     // 翻译结果
     const translationDiv = document.createElement('div');
-    translationDiv.className = 'translation-result';
+    translationDiv.className = 'translation-result-section';
     translationDiv.innerHTML = `
-        <div class="result-title"><i class="fas fa-language"></i> 翻译结果</div>
-        <div class="translated-text">${result.translatedText}</div>
+        <div class="section-header">
+            <div class="section-title"><i class="fas fa-language"></i> ${isImageTranslation ? '图片文字翻译' : '文本翻译'}</div>
+            <div class="section-actions">
+                <button class="section-btn copy-translation-btn" title="复制翻译结果">
+                    <i class="fas fa-clipboard"></i> 复制翻译
+                </button>
+            </div>
+        </div>
+        <div class="section-content translated-text">${escapeHtml(result.translatedText)}</div>
     `;
     contentDiv.appendChild(translationDiv);
     
-    // 操作按钮
+    // 主要操作按钮
     const actionButtons = document.createElement('div');
     actionButtons.className = 'message-actions';
     
-    const copyButton = document.createElement('button');
-    copyButton.className = 'action-btn copy-btn';
-    copyButton.innerHTML = '<i class="fas fa-clipboard"></i> 复制';
-    copyButton.addEventListener('click', function() {
-        copyTextToClipboard(result.translatedText);
-        showNotification('已复制翻译结果到剪贴板', this);
-    });
+    // 根据是否为图片翻译显示不同的按钮
+    if (isImageTranslation) {
+        const copyOnlyTranslationBtn = document.createElement('button');
+        copyOnlyTranslationBtn.className = 'action-btn copy-btn primary';
+        copyOnlyTranslationBtn.innerHTML = '<i class="fas fa-clipboard"></i> 复制翻译结果';
+        copyOnlyTranslationBtn.addEventListener('click', function() {
+            copyTextToClipboard(result.translatedText);
+            showNotification('已复制翻译结果（不含OCR文本）', this);
+        });
+        
+        const copyAllBtn = document.createElement('button');
+        copyAllBtn.className = 'action-btn copy-all-btn';
+        copyAllBtn.innerHTML = '<i class="fas fa-copy"></i> 复制全部';
+        copyAllBtn.addEventListener('click', function() {
+            const fullText = `OCR识别:\n${result.originalText}\n\n翻译结果:\n${result.translatedText}`;
+            copyTextToClipboard(fullText);
+            showNotification('已复制OCR识别和翻译结果', this);
+        });
+        
+        actionButtons.appendChild(copyOnlyTranslationBtn);
+        actionButtons.appendChild(copyAllBtn);
+    } else {
+        const copyButton = document.createElement('button');
+        copyButton.className = 'action-btn copy-btn primary';
+        copyButton.innerHTML = '<i class="fas fa-clipboard"></i> 复制结果';
+        copyButton.addEventListener('click', function() {
+            copyTextToClipboard(result.translatedText);
+            showNotification('已复制翻译结果', this);
+        });
+        
+        actionButtons.appendChild(copyButton);
+    }
     
     const copyToInputButton = document.createElement('button');
     copyToInputButton.className = 'action-btn copy-to-input-btn';
@@ -2029,15 +2466,32 @@ function addAITranslationMessage(result, saveToHistory = true) {
             chatInput.focus();
             setTimeout(autoResizeInput, 0);
         }
-        showNotification('已复制到对话框', this);
+        showNotification('已复制翻译结果到对话框', this);
     });
     
-    actionButtons.appendChild(copyButton);
     actionButtons.appendChild(copyToInputButton);
     contentDiv.appendChild(actionButtons);
     
     messageDiv.appendChild(contentDiv);
     chatMessages.appendChild(messageDiv);
+    
+    // 添加内部按钮事件监听
+    const copyOcrBtn = messageDiv.querySelector('.copy-ocr-btn');
+    const copyTranslationBtn = messageDiv.querySelector('.copy-translation-btn');
+    
+    if (copyOcrBtn) {
+        copyOcrBtn.addEventListener('click', function() {
+            copyTextToClipboard(result.originalText);
+            showNotification('已复制OCR识别文本', this);
+        });
+    }
+    
+    if (copyTranslationBtn) {
+        copyTranslationBtn.addEventListener('click', function() {
+            copyTextToClipboard(result.translatedText);
+            showNotification('已复制翻译结果', this);
+        });
+    }
     
     if (saveToHistory) {
         saveMessageToCurrentConversation({

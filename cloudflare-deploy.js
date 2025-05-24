@@ -9,6 +9,7 @@ const filesToCopy = [
     'login.html',
     'css',
     'js',
+    'functions',
     'cloudflare-config.js',
     'auth-config.js',
     '_headers',

@@ -6,6 +6,7 @@
     <title>TranOptim - 智能翻译与润色工具</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="stylesheet" href="css/style.css">
+    <link rel="stylesheet" href="css/error-styles.css">
     <!-- 认证配置和脚本 -->
     <script src="auth-config.js"></script>
     <script src="js/auth.js"></script>
@@ -238,19 +239,23 @@
     </div>
 
     <!-- 加载覆盖层 -->
-    <div class="loading-overlay hidden" id="loadingOverlay">
+    <div id="loading-overlay" class="loading-overlay hidden">
         <div class="spinner"></div>
-        <div class="loading-text" id="loadingText">正在翻译中...</div>
-        <div class="loading-timeout-hint" id="loadingTimeoutHint">
-            如果加载时间过长，请<a href="javascript:void(0)" onclick="window.location.reload()">刷新页面</a>重试
-        </div>
+        <p>正在处理，请稍候...</p>
     </div>
 
-    <!-- 通知组件 -->
-    <div class="notification" id="notification"></div>
+    <!-- 通知 -->
+    <div id="notification" class="notification">
+        <span id="notification-message"></span>
+    </div>
 
-    <!-- 应用脚本 -->
-    <script src="js/app.js?v=1.0.3"></script>
+    <!-- 版本号显示 -->
+    <div style="position: fixed; bottom: 8px; right: 8px; color: #999; font-size: 12px; z-index: 1000;">
+        v1.0.9
+    </div>
+
+    <script src="js/error-handler.js"></script>
+    <script src="js/app.js"></script>
     
     <!-- 认证初始检查脚本 -->
     <script>

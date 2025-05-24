@@ -30,12 +30,25 @@ Thumbs.db
 *.bak
 index.html.bak
 
-# Cloudflare部署临时文件
+# Wrangler本地文件（保留）
 .wrangler/
 dist/
-wrangler.toml
 
 # 敏感信息和测试文件
 test_*
 test-*
 AI-SERVICES-TEST-REPORT.md
+
+# 备份文件和目录
+backup/
+backup-*/
+*.backup
+
+# 开发调试文件
+debug.html
+button-test.html
+quick-test*.html
+final-test*.html
+
+# 部署生成的临时文件（保留核心部署文件）
+deploy/temp/

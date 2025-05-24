@@ -1,0 +1,351 @@
+/* TranOptim 错误处理样式 */
+
+/* 错误模态框基础样式 */
+.error-modal, .help-modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 10000;
+    opacity: 0;
+    visibility: hidden;
+    transition: all 0.3s ease;
+}
+
+.error-modal.show, .help-modal.show {
+    opacity: 1;
+    visibility: visible;
+}
+
+.error-modal-overlay, .help-modal-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.6);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    box-sizing: border-box;
+}
+
+.error-modal-content, .help-modal-content {
+    background: white;
+    border-radius: 12px;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+    max-width: 500px;
+    width: 100%;
+    max-height: 80vh;
+    overflow-y: auto;
+    transform: scale(0.9) translateY(-20px);
+    transition: transform 0.3s ease;
+}
+
+.error-modal.show .error-modal-content,
+.help-modal.show .help-modal-content {
+    transform: scale(1) translateY(0);
+}
+
+/* 错误对话框样式 */
+.error-dialog {
+    padding: 0;
+}
+
+.error-header {
+    background: linear-gradient(135deg, #ff6b6b, #ee5a52);
+    color: white;
+    padding: 20px;
+    border-radius: 12px 12px 0 0;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.error-icon {
+    font-size: 24px;
+    flex-shrink: 0;
+}
+
+.error-title {
+    font-size: 18px;
+    font-weight: 600;
+    margin: 0;
+    flex: 1;
+}
+
+.error-content {
+    padding: 24px;
+}
+
+.error-message {
+    font-size: 16px;
+    color: #444;
+    margin: 0 0 20px 0;
+    line-height: 1.5;
+}
+
+.error-solutions {
+    background: #f8f9fa;
+    border-radius: 8px;
+    padding: 16px;
+    border-left: 4px solid #007bff;
+}
+
+.error-solutions h4 {
+    font-size: 14px;
+    font-weight: 600;
+    color: #495057;
+    margin: 0 0 12px 0;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.error-solutions ul {
+    margin: 0;
+    padding-left: 20px;
+    list-style-type: disc;
+}
+
+.error-solutions li {
+    color: #666;
+    line-height: 1.6;
+    margin-bottom: 8px;
+    font-size: 14px;
+}
+
+.error-solutions li:last-child {
+    margin-bottom: 0;
+}
+
+.error-actions {
+    padding: 20px 24px;
+    border-top: 1px solid #e9ecef;
+    display: flex;
+    gap: 12px;
+    justify-content: flex-end;
+    background: #f8f9fa;
+    border-radius: 0 0 12px 12px;
+}
+
+/* 按钮样式 */
+.error-actions .btn {
+    padding: 8px 16px;
+    border-radius: 6px;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    border: 1px solid transparent;
+    transition: all 0.2s ease;
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.error-actions .btn-primary {
+    background: #007bff;
+    color: white;
+    border-color: #007bff;
+}
+
+.error-actions .btn-primary:hover {
+    background: #0056b3;
+    border-color: #0056b3;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(0, 123, 255, 0.3);
+}
+
+.error-actions .btn-secondary {
+    background: #6c757d;
+    color: white;
+    border-color: #6c757d;
+}
+
+.error-actions .btn-secondary:hover {
+    background: #545b62;
+    border-color: #545b62;
+    transform: translateY(-1px);
+}
+
+.error-actions .btn-info {
+    background: white;
+    color: #17a2b8;
+    border-color: #17a2b8;
+}
+
+.error-actions .btn-info:hover {
+    background: #17a2b8;
+    color: white;
+    transform: translateY(-1px);
+}
+
+/* 帮助对话框样式 */
+.help-dialog {
+    padding: 0;
+}
+
+.help-dialog h3 {
+    background: linear-gradient(135deg, #17a2b8, #138496);
+    color: white;
+    margin: 0;
+    padding: 20px 24px;
+    border-radius: 12px 12px 0 0;
+    font-size: 18px;
+    font-weight: 600;
+}
+
+.help-sections {
+    padding: 24px;
+}
+
+.help-section {
+    margin-bottom: 24px;
+}
+
+.help-section:last-child {
+    margin-bottom: 0;
+}
+
+.help-section h4 {
+    color: #495057;
+    font-size: 16px;
+    font-weight: 600;
+    margin: 0 0 12px 0;
+}
+
+.help-section p {
+    color: #666;
+    line-height: 1.6;
+    margin: 0 0 12px 0;
+}
+
+.help-section ul {
+    margin: 0;
+    padding-left: 20px;
+    list-style-type: disc;
+}
+
+.help-section li {
+    color: #666;
+    line-height: 1.6;
+    margin-bottom: 8px;
+}
+
+.help-actions {
+    padding: 20px 24px;
+    border-top: 1px solid #e9ecef;
+    display: flex;
+    justify-content: center;
+    background: #f8f9fa;
+    border-radius: 0 0 12px 12px;
+}
+
+/* 响应式设计 */
+@media (max-width: 768px) {
+    .error-modal-overlay, .help-modal-overlay {
+        padding: 12px;
+    }
+    
+    .error-modal-content, .help-modal-content {
+        max-width: 100%;
+        max-height: 90vh;
+    }
+    
+    .error-header {
+        padding: 16px;
+    }
+    
+    .error-content, .help-sections {
+        padding: 20px;
+    }
+    
+    .error-actions, .help-actions {
+        padding: 16px 20px;
+        flex-direction: column;
+    }
+    
+    .error-actions .btn {
+        width: 100%;
+        justify-content: center;
+    }
+    
+    .error-icon {
+        font-size: 20px;
+    }
+    
+    .error-title, .help-dialog h3 {
+        font-size: 16px;
+    }
+}
+
+/* 深色模式支持 */
+@media (prefers-color-scheme: dark) {
+    .error-modal-content, .help-modal-content {
+        background: #2c3e50;
+        color: #ecf0f1;
+    }
+    
+    .error-message, .help-section p, .help-section li {
+        color: #bdc3c7;
+    }
+    
+    .error-solutions {
+        background: #34495e;
+        border-left-color: #3498db;
+    }
+    
+    .error-solutions h4 {
+        color: #ecf0f1;
+    }
+    
+    .error-solutions li {
+        color: #bdc3c7;
+    }
+    
+    .error-actions, .help-actions {
+        background: #34495e;
+        border-top-color: #4a5f7a;
+    }
+    
+    .help-section h4 {
+        color: #ecf0f1;
+    }
+}
+
+/* 动画效果 */
+@keyframes shake {
+    0%, 100% { transform: translateX(0); }
+    10%, 30%, 50%, 70%, 90% { transform: translateX(-2px); }
+    20%, 40%, 60%, 80% { transform: translateX(2px); }
+}
+
+.error-modal-content.shake {
+    animation: shake 0.5s ease-in-out;
+}
+
+/* 加载状态样式 */
+.error-actions .btn.loading {
+    position: relative;
+    color: transparent;
+}
+
+.error-actions .btn.loading::after {
+    content: "";
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 14px;
+    height: 14px;
+    margin: -7px 0 0 -7px;
+    border: 2px solid transparent;
+    border-top-color: currentColor;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+} 

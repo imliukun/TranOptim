@@ -852,11 +852,6 @@ document.addEventListener('DOMContentLoaded', function() {
             ocrDiv.appendChild(ocrText);
             
             contentDiv.appendChild(ocrDiv);
-            
-            // 添加分隔线
-            const divider = document.createElement('div');
-            divider.className = 'result-divider';
-            contentDiv.appendChild(divider);
         }
         
         // 添加翻译结果

@@ -1879,8 +1879,8 @@ async function polishWithDeepSeek(text, style = 'professional') {
         }
         
         try {
-            // 调用DeepSeek API
-            const apiUrl = 'https://api.deepseek.com/v1/chat/completions';
+            // 使用与翻译一致的SiliconFlow平台API
+            const apiUrl = 'https://api.siliconflow.cn/v1/chat/completions';
             
             // 准备请求配置
             const requestConfig = {
@@ -1898,11 +1898,14 @@ async function polishWithDeepSeek(text, style = 'professional') {
                 requestConfig.proxy = false; // 当使用httpsAgent时，设置proxy为false以避免冲突
             }
             
+            console.log('DeepSeek润色API请求地址:', apiUrl);
+            console.log('DeepSeek润色API使用模型: deepseek-ai/DeepSeek-V3');
+            
             console.log('开始发送DeepSeek润色API请求');
             console.time('DeepSeek润色API请求时间');
             
             const response = await axios.post(apiUrl, {
-                model: 'deepseek-chat',
+                model: 'deepseek-ai/DeepSeek-V3',
                 messages: [
                     {
                         role: 'system',
@@ -1914,16 +1917,54 @@ async function polishWithDeepSeek(text, style = 'professional') {
                     }
                 ],
                 temperature: 0.7,
-                max_tokens: 2048
+                max_tokens: 2048,
+                stream: false, // 确保不使用流式响应
+                disable_reasoning: true // 禁用推理过程，直接返回结果
             }, requestConfig);
             
             console.timeEnd('DeepSeek润色API请求时间');
+            console.log('DeepSeek润色API响应状态:', response.status);
             
             if (!response.data || !response.data.choices || !response.data.choices.length) {
+                console.error('DeepSeek润色返回异常响应:', JSON.stringify(response.data));
                 throw new Error('DeepSeek返回异常响应');
             }
             
-            const polishedText = response.data.choices[0].message.content;
+            const choice = response.data.choices[0];
+            let polishedText = '';
+            
+            if (choice.message && choice.message.content && choice.message.content.trim()) {
+                polishedText = choice.message.content;
+            } else if (choice.message && choice.message.reasoning_content) {
+                // 如果content为空但有reasoning_content，尝试从推理内容中提取润色结果
+                console.log('DeepSeek润色返回了推理内容，尝试提取润色结果...');
+                const reasoningContent = choice.message.reasoning_content;
+                
+                // 查找最可能的润色内容
+                const regex = /"([^"]+)"|'([^']+)'|「([^」]+)」|『([^』]+)』|润色[为成](.*?)[。\n]|修改为[：:](.*?)[。\n]|结果[：:](.*?)[。\n]/g;
+                const matches = [...reasoningContent.matchAll(regex)];
+                
+                if (matches.length > 0) {
+                    const lastMatch = matches[matches.length - 1];
+                    polishedText = lastMatch.slice(1).find(m => m) || '';
+                    console.log('从推理内容中提取的润色结果:', polishedText);
+                }
+                
+                if (!polishedText.trim()) {
+                    const lines = reasoningContent.split('\n');
+                    if (lines.length > 2) {
+                        polishedText = lines[lines.length - 1].trim();
+                    } else {
+                        polishedText = reasoningContent.substring(Math.floor(reasoningContent.length / 2)).trim();
+                    }
+                }
+            }
+            
+            if (!polishedText.trim()) {
+                polishedText = '无法从DeepSeek响应中提取润色结果，请尝试使用其他模型。';
+            }
+            
+            console.log('DeepSeek润色成功, 结果长度:', polishedText.length);
             
             return {
                 originalText: text,
@@ -1933,7 +1974,40 @@ async function polishWithDeepSeek(text, style = 'professional') {
             };
         } catch (error) {
             console.error('DeepSeek润色API调用失败:', error);
-            throw new Error('DeepSeek润色服务暂时不可用: ' + (error.response?.data?.error?.message || error.message));
+            
+            let errorMessage = error.message || '未知错误';
+            
+            if (error.response) {
+                console.error('DeepSeek润色响应详情:', {
+                    status: error.response.status,
+                    statusText: error.response.statusText,
+                    data: error.response.data
+                });
+                
+                if (error.response.data && error.response.data.error) {
+                    errorMessage = error.response.data.error.message || error.response.data.error;
+                } else if (error.response.data && error.response.data.message) {
+                    errorMessage = error.response.data.message;
+                }
+                
+                if (error.response.status === 401 || error.response.status === 403) {
+                    errorMessage = 'DeepSeek API密钥无效或未授权，请检查API密钥设置';
+                } else if (error.response.status === 404) {
+                    errorMessage = 'DeepSeek API端点不存在，请检查API地址';
+                } else if (error.response.status >= 500) {
+                    errorMessage = 'DeepSeek服务器内部错误，请稍后重试';
+                }
+            } else if (error.request) {
+                if (error.code === 'ECONNABORTED') {
+                    errorMessage = 'DeepSeek润色请求超时，请尝试配置代理服务器或增加超时时间';
+                } else if (error.code === 'ECONNREFUSED') {
+                    errorMessage = 'DeepSeek润色连接被拒绝，API服务器可能不可用';
+                } else {
+                    errorMessage = `DeepSeek润色网络请求失败 (${error.code || 'UNKNOWN_ERROR'})`;
+                }
+            }
+            
+            throw new Error('DeepSeek润色服务暂时不可用: ' + errorMessage);
         }
     } catch (error) {
         console.error('DeepSeek润色错误:', error);
@@ -1983,8 +2057,8 @@ async function polishWithQwen(text, style = 'professional') {
         }
         
         try {
-            // 调用千问API
-            const apiUrl = 'https://dashscope.aliyuncs.com/api/v1/services/aigc/text-generation/generation';
+            // 使用与翻译一致的SiliconFlow平台API
+            const apiUrl = 'https://api.siliconflow.cn/v1/chat/completions';
             
             // 准备请求配置
             const requestConfig = {

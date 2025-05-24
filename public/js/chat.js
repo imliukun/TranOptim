@@ -41,37 +41,25 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // 自动调整输入框高度的函数
     function autoResizeInput() {
+        const chatInput = document.getElementById('chatInput');
         if (!chatInput) return;
         
-        console.log('调整输入框高度');
-        
-        // 保存当前滚动位置
-        const scrollTop = chatInput.scrollTop;
-        
-        // 重置高度，以便正确计算
+        // 重置高度以获取准确的scrollHeight
         chatInput.style.height = 'auto';
         
-        // 计算新高度 (取内容高度和最小高度中的较大值，但不超过最大高度)
-        const minHeight = 40; // 最小高度设为40px
-        const scrollHeight = chatInput.scrollHeight;
-        const maxHeight = 200; // 最大高度
+        // 设置最小高度为一行，最大高度为6行
+        const lineHeight = 24; // 根据CSS中的line-height计算
+        const minHeight = lineHeight * 1;
+        const maxHeight = lineHeight * 6;
         
-        console.log('输入框滚动高度:', scrollHeight);
+        // 计算实际需要的高度
+        let newHeight = chatInput.scrollHeight;
         
-        // 设置高度
-        const newHeight = Math.max(minHeight, Math.min(scrollHeight, maxHeight));
+        // 限制在最小和最大高度之间
+        if (newHeight < minHeight) newHeight = minHeight;
+        if (newHeight > maxHeight) newHeight = maxHeight;
+        
         chatInput.style.height = newHeight + 'px';
-        
-        // 如果达到最大高度，允许滚动
-        if (newHeight >= maxHeight) {
-            chatInput.style.overflowY = 'auto';
-            // 恢复滚动位置
-            chatInput.scrollTop = scrollTop;
-        } else {
-            chatInput.style.overflowY = 'hidden';
-        }
-        
-        console.log('新输入框高度:', newHeight, 'px');
     }
     
     // 在输入框内容变化时触发高度调整
@@ -864,11 +852,6 @@ document.addEventListener('DOMContentLoaded', function() {
             ocrDiv.appendChild(ocrText);
             
             contentDiv.appendChild(ocrDiv);
-            
-            // 添加分隔线
-            const divider = document.createElement('div');
-            divider.className = 'result-divider';
-            contentDiv.appendChild(divider);
         }
         
         // 添加翻译结果
@@ -1093,22 +1076,39 @@ document.addEventListener('DOMContentLoaded', function() {
         return div.innerHTML;
     }
     
+    // 输入框自动高度调整
+    chatInput.addEventListener('input', autoResizeInput);
+    chatInput.addEventListener('keydown', function(e) {
+        if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            // 处理发送消息逻辑
+        }
+    });
+    
+    // 初始化模型选择记忆
+    loadModelSelections();
+    
+    // 监听模型选择变化，自动保存
+    document.addEventListener('change', function(e) {
+        if (e.target.name === 'translate-service' || 
+            e.target.name === 'polish-service' || 
+            e.target.id === 'polishStyle') {
+            saveModelSelections();
+        }
+    });
+    
     // 新对话按钮事件
     newChatBtn.addEventListener('click', () => {
-        // 保存当前的翻译和润色模型设置
-        const currentTranslateService = document.querySelector('input[name="translate-service"]:checked')?.value || 'gpt';
-        const currentPolishService = document.querySelector('input[name="polish-service"]:checked')?.value || 'gpt';
+        console.log('点击新对话按钮');
+        
+        // 保存当前模型选择
+        saveModelSelections();
         
         // 使用原有的创建新对话功能
         createNewConversation();
         
         // 确保新对话时保留选定的翻译和润色模型
-        document.querySelector(`input[name="translate-service"][value="${currentTranslateService}"]`)?.checked = true;
-        document.querySelector(`input[name="polish-service"][value="${currentPolishService}"]`)?.checked = true;
-        
-        // 保存设置到localStorage
-        localStorage.setItem('lastTranslateService', currentTranslateService);
-        localStorage.setItem('lastPolishService', currentPolishService);
+        loadModelSelections();
     });
     
     // 清空所有对话按钮事件
@@ -1458,11 +1458,6 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
     
-    // 输入历史记录管理
-    // 删除这里的变量定义，已移至文件顶部
-    // let inputHistory = [];
-    // let inputHistoryIndex = -1;
-    
     // 添加到输入记忆
     function addToInputHistory(text) {
         if (!text || text.trim() === '') return;
@@ -1580,4 +1575,49 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // 初始化调用一次自动调整输入框高度
     autoResizeInput();
+
+    // 保存模型选择到localStorage
+    function saveModelSelections() {
+        const translateService = document.querySelector('input[name="translate-service"]:checked');
+        const polishService = document.querySelector('input[name="polish-service"]:checked');
+        const polishStyle = document.getElementById('polishStyle');
+        
+        const selections = {
+            translateService: translateService ? translateService.value : 'gpt',
+            polishService: polishService ? polishService.value : 'gpt',
+            polishStyle: polishStyle ? polishStyle.value : 'professional'
+        };
+        
+        localStorage.setItem('tranoptim-model-selections', JSON.stringify(selections));
+    }
+
+    // 加载模型选择
+    function loadModelSelections() {
+        const saved = localStorage.getItem('tranoptim-model-selections');
+        if (saved) {
+            try {
+                const selections = JSON.parse(saved);
+                
+                // 恢复翻译服务选择
+                const translateRadio = document.querySelector(`input[name="translate-service"][value="${selections.translateService}"]`);
+                if (translateRadio) {
+                    translateRadio.checked = true;
+                }
+                
+                // 恢复润色服务选择
+                const polishRadio = document.querySelector(`input[name="polish-service"][value="${selections.polishService}"]`);
+                if (polishRadio) {
+                    polishRadio.checked = true;
+                }
+                
+                // 恢复润色风格选择
+                const polishStyleSelect = document.getElementById('polishStyle');
+                if (polishStyleSelect && selections.polishStyle) {
+                    polishStyleSelect.value = selections.polishStyle;
+                }
+            } catch (e) {
+                console.error('加载模型选择失败:', e);
+            }
+        }
+    }
 });

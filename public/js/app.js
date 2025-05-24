@@ -1,15 +1,584 @@
 // TranOptim - 智能翻译与润色工具 JavaScript
 console.log('[DEBUG] TranOptim app.js script started loading!');
 
+// 全局变量定义
+let currentImageFile = null;
+let messageCounter = 0;
+let conversations = [];
+let currentConversationId = null;
+let activeSettingsPanel = null;
+let inputHistory = [];
+let inputHistoryIndex = -1;
+
+// 全局DOM元素引用
+let chatMessages = null;
+let chatInput = null;
+let translateBtn = null;
+let polishBtn = null;
+let uploadImageBtn = null;
+let imageUpload = null;
+let conversationList = null;
+
+// 输入框自动高度调整函数 - 移到全局作用域
+function autoResizeInput() {
+    if (!chatInput) return;
+    
+    // 重置高度以获取准确的scrollHeight
+    chatInput.style.height = 'auto';
+    
+    // 设置最小高度为一行，最大高度为6行
+    const lineHeight = 24; // 根据CSS中的line-height计算
+    const minHeight = lineHeight * 1;
+    const maxHeight = lineHeight * 6;
+    
+    // 计算实际需要的高度
+    let newHeight = chatInput.scrollHeight;
+    
+    // 限制在最小和最大高度之间
+    if (newHeight < minHeight) newHeight = minHeight;
+    if (newHeight > maxHeight) newHeight = maxHeight;
+    
+    chatInput.style.height = newHeight + 'px';
+    console.log('输入框高度调整为:', newHeight, 'px');
+}
+
+// 复制文本到剪贴板函数 - 移到全局作用域
+function copyTextToClipboard(text) {
+    const tempElement = document.createElement('textarea');
+    tempElement.value = text;
+    document.body.appendChild(tempElement);
+    tempElement.select();
+    document.execCommand('copy');
+    document.body.removeChild(tempElement);
+}
+
+// 显示通知函数 - 移到全局作用域
+function showNotification(message, target = null, type = 'success') {
+    console.log('显示通知:', message, '目标元素:', !!target);
+    
+    // 如果提供了目标元素，则显示目标元素旁的通知
+    if (target && target instanceof HTMLElement) {
+        // 检查元素上是否已经有通知，如果有则删除
+        const existingNotification = target.querySelector('.button-notification');
+        if (existingNotification) {
+            existingNotification.remove();
+        }
+        
+        // 创建新的通知元素
+        const buttonNotification = document.createElement('div');
+        buttonNotification.className = 'button-notification';
+        buttonNotification.textContent = message;
+        
+        // 添加到目标元素
+        target.appendChild(buttonNotification);
+        
+        // 显示通知
+        setTimeout(() => {
+            buttonNotification.classList.add('show');
+        }, 10);
+        
+        // 3秒后自动隐藏
+        setTimeout(() => {
+            buttonNotification.classList.remove('show');
+            // 动画完成后移除元素
+            setTimeout(() => {
+                buttonNotification.remove();
+            }, 300);
+        }, 2000);
+    } else {
+        // 使用全局通知
+        let globalNotification = document.getElementById('notification');
+        if (!globalNotification) {
+            // 创建全局通知元素
+            globalNotification = document.createElement('div');
+            globalNotification.id = 'notification';
+            globalNotification.className = 'notification';
+            document.body.appendChild(globalNotification);
+        }
+        
+        globalNotification.textContent = message;
+        globalNotification.classList.add('show');
+        
+        // 3秒后自动隐藏
+        setTimeout(() => {
+            globalNotification.classList.remove('show');
+        }, 3000);
+    }
+}
+
+// 滚动到底部函数 - 移到全局作用域
+function scrollToBottom() {
+    if (chatMessages) {
+        chatMessages.scrollTop = chatMessages.scrollHeight;
+    }
+}
+
+// HTML转义函数 - 移到全局作用域
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+// 保存对话消息函数 - 完善对话管理功能
+function saveMessageToCurrentConversation(message) {
+    if (!currentConversationId) {
+        // 如果没有当前对话，创建一个新对话
+        createNewConversation();
+    }
+    
+    // 查找当前对话
+    const conversationIndex = conversations.findIndex(conv => conv.id === currentConversationId);
+    if (conversationIndex === -1) {
+        console.error('当前对话不存在，创建新对话');
+        createNewConversation();
+        return;
+    }
+    
+    // 添加消息
+    conversations[conversationIndex].messages.push(message);
+    
+    // 更新对话的最后修改时间
+    conversations[conversationIndex].updatedAt = new Date().toISOString();
+    
+    // 如果是第一条用户消息，更新对话标题
+    if (message.type === 'user' && conversations[conversationIndex].messages.length === 1) {
+        let title = message.content || '';
+        if (title.length > 20) {
+            title = title.substring(0, 20) + '...';
+        }
+        if (!title && message.hasImage) {
+            title = '[图片对话]';
+        }
+        if (title) {
+            conversations[conversationIndex].title = title;
+        }
+    }
+    
+    // 保存到本地存储
+    saveConversationsToStorage();
+    
+    // 更新UI
+    renderConversationList();
+}
+
+// 对话管理相关函数
+function initConversationManager() {
+    // 从本地存储加载对话历史
+    loadConversationsFromStorage();
+    
+    // 如果没有对话，创建一个新对话
+    if (conversations.length === 0) {
+        createNewConversation();
+    } else {
+        // 设置第一个对话为当前对话
+        currentConversationId = conversations[0].id;
+    }
+    
+    // 渲染对话列表
+    renderConversationList();
+}
+
+function loadConversationsFromStorage() {
+    const savedConversations = localStorage.getItem('tranoptim-conversations');
+    if (savedConversations) {
+        try {
+            conversations = JSON.parse(savedConversations);
+        } catch (e) {
+            console.error('加载对话历史失败:', e);
+            conversations = [];
+        }
+    }
+}
+
+function saveConversationsToStorage() {
+    localStorage.setItem('tranoptim-conversations', JSON.stringify(conversations));
+}
+
+function createNewConversation() {
+    // 保存当前模型选择
+    saveModelSelections();
+    
+    // 生成唯一ID
+    const newId = 'conv-' + Date.now().toString();
+    const newConversation = {
+        id: newId,
+        title: '新对话 ' + new Date().toLocaleString('zh-CN', {month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'}),
+        messages: [],
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+    };
+    
+    // 添加到对话列表的开头
+    conversations.unshift(newConversation);
+    
+    // 保存到本地存储
+    saveConversationsToStorage();
+    
+    // 设置为当前对话
+    currentConversationId = newId;
+    
+    // 更新UI
+    renderConversationList();
+    
+    // 清空聊天区域并显示欢迎消息
+    if (chatMessages) {
+        chatMessages.innerHTML = `
+            <div class="message system">
+                <div class="message-content">
+                    <p>👋 欢迎使用 TranOptim 智能翻译与润色工具！</p>
+                    <p>您可以直接输入文本进行翻译，或者上传图片进行图像文本翻译。</p>
+                </div>
+            </div>
+        `;
+    }
+    
+    // 重置消息计数器
+    messageCounter = 0;
+    
+    // 重新加载模型选择
+    loadModelSelections();
+    
+    return newId;
+}
+
+function loadConversation(conversationId) {
+    const conversation = conversations.find(conv => conv.id === conversationId);
+    if (!conversation) return;
+    
+    currentConversationId = conversationId;
+    
+    // 清空聊天区域
+    if (chatMessages) {
+        chatMessages.innerHTML = `
+            <div class="message system">
+                <div class="message-content">
+                    <p>👋 欢迎使用 TranOptim 智能翻译与润色工具！</p>
+                    <p>您可以直接输入文本进行翻译，或者上传图片进行图像文本翻译。</p>
+                </div>
+            </div>
+        `;
+        
+        // 重新显示历史消息
+        conversation.messages.forEach(message => {
+            if (message.type === 'user') {
+                addUserMessage(message.content, null, false);
+            } else if (message.type === 'ai') {
+                if (message.translationResult) {
+                    addAITranslationMessage(message.translationResult, false);
+                } else if (message.polishResult) {
+                    addAIPolishMessage(message.polishResult, false);
+                }
+            }
+        });
+    }
+    
+    // 更新对话列表的活动状态
+    renderConversationList();
+}
+
+function renderConversationList() {
+    if (!conversationList) return;
+    
+    conversationList.innerHTML = '';
+    
+    conversations.forEach(conv => {
+        const item = document.createElement('div');
+        item.className = 'conversation-item';
+        if (conv.id === currentConversationId) {
+            item.classList.add('active');
+        }
+        
+        item.innerHTML = `
+            <div class="conversation-icon">
+                <i class="fas fa-comments"></i>
+            </div>
+            <div class="conversation-content">
+                <div class="conversation-title">${conv.title}</div>
+                <div class="conversation-time">${getRelativeTime(conv.updatedAt)}</div>
+            </div>
+            <div class="conversation-actions">
+                <button class="conversation-delete" data-id="${conv.id}" title="删除对话">
+                    <i class="fas fa-trash"></i>
+                </button>
+            </div>
+        `;
+        
+        // 点击加载对话
+        item.addEventListener('click', function(e) {
+            if (e.target.closest('.conversation-delete')) return;
+            loadConversation(conv.id);
+        });
+        
+        // 删除对话
+        const deleteBtn = item.querySelector('.conversation-delete');
+        deleteBtn.addEventListener('click', function(e) {
+            e.stopPropagation();
+            if (confirm('确定要删除这个对话吗？')) {
+                deleteConversation(conv.id);
+            }
+        });
+        
+        conversationList.appendChild(item);
+    });
+}
+
+function deleteConversation(conversationId) {
+    // 查找对话索引
+    const conversationIndex = conversations.findIndex(conv => conv.id === conversationId);
+    if (conversationIndex === -1) return;
+    
+    // 删除对话
+    conversations.splice(conversationIndex, 1);
+    
+    // 保存到本地存储
+    saveConversationsToStorage();
+    
+    // 如果删除的是当前对话，加载另一个对话或创建新对话
+    if (conversationId === currentConversationId) {
+        if (conversations.length > 0) {
+            loadConversation(conversations[0].id);
+        } else {
+            createNewConversation();
+        }
+    }
+    
+    // 更新UI
+    renderConversationList();
+    
+    showNotification('对话已删除');
+}
+
+function getRelativeTime(timestamp) {
+    const now = new Date();
+    const time = new Date(timestamp);
+    const diffMs = now - time;
+    const diffMinutes = Math.floor(diffMs / (1000 * 60));
+    const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+    
+    if (diffDays > 0) {
+        return `${diffDays}天前`;
+    } else if (diffHours > 0) {
+        return `${diffHours}小时前`;
+    } else if (diffMinutes > 0) {
+        return `${diffMinutes}分钟前`;
+    } else {
+        return '刚刚';
+    }
+}
+
+// 处理输入框图片粘贴功能
+function setupImagePasteSupport() {
+    if (!chatInput) return;
+    
+    chatInput.addEventListener('paste', function(e) {
+        const items = e.clipboardData?.items;
+        if (!items) return;
+        
+        // 检查剪贴板中是否有图片
+        for (let i = 0; i < items.length; i++) {
+            const item = items[i];
+            if (item.type.indexOf('image') !== -1) {
+                e.preventDefault();
+                
+                const file = item.getAsFile();
+                if (file) {
+                    // 设置当前图片文件
+                    currentImageFile = file;
+                    console.log('图片粘贴成功，设置currentImageFile:', !!currentImageFile, file.name);
+                    
+                    // 更新上传按钮状态
+                    if (uploadImageBtn) {
+                        uploadImageBtn.innerHTML = '<i class="fas fa-image"></i> 已粘贴图片';
+                        uploadImageBtn.style.backgroundColor = '#28a745';
+                    }
+                    
+                    // 在输入框中显示提示
+                    const currentText = chatInput.value;
+                    if (currentText && !currentText.includes('[图片已粘贴]')) {
+                        chatInput.value = currentText + ' [图片已粘贴]';
+                    } else if (!currentText) {
+                        chatInput.value = '[图片已粘贴]';
+                    }
+                    
+                    // 添加图片状态类
+                    chatInput.classList.add('has-image');
+                    
+                    // 触发高度调整
+                    setTimeout(autoResizeInput, 0);
+                    
+                    showNotification('图片已粘贴，点击翻译按钮开始处理');
+                }
+                break;
+            }
+        }
+    });
+    
+    // 添加拖拽支持
+    chatInput.addEventListener('dragover', function(e) {
+        e.preventDefault();
+        chatInput.style.backgroundColor = '#f0f8ff';
+    });
+    
+    chatInput.addEventListener('dragleave', function(e) {
+        e.preventDefault();
+        chatInput.style.backgroundColor = '';
+    });
+    
+    chatInput.addEventListener('drop', function(e) {
+        e.preventDefault();
+        chatInput.style.backgroundColor = '';
+        
+        const files = e.dataTransfer.files;
+        if (files.length > 0 && files[0].type.startsWith('image/')) {
+            const file = files[0];
+            
+            // 设置当前图片文件
+            currentImageFile = file;
+            
+            // 更新上传按钮状态
+            if (uploadImageBtn) {
+                uploadImageBtn.innerHTML = '<i class="fas fa-image"></i> ' + file.name.substring(0, 10) + '...';
+                uploadImageBtn.style.backgroundColor = '#28a745';
+            }
+            
+            // 在输入框中显示提示
+            const currentText = chatInput.value;
+            if (currentText && !currentText.includes('[图片已拖拽]')) {
+                chatInput.value = currentText + ' [图片已拖拽]';
+            } else if (!currentText) {
+                chatInput.value = '[图片已拖拽]';
+            }
+            
+            // 添加图片状态类
+            chatInput.classList.add('has-image');
+            
+            // 触发高度调整
+            setTimeout(autoResizeInput, 0);
+            
+            showNotification('图片已选择: ' + file.name);
+        }
+    });
+}
+
+// 添加加载消息函数 - 移到全局作用域
+function addLoadingMessage() {
+    if (!chatMessages) return null;
+    
+    const messageId = 'loading-msg-' + (++messageCounter);
+    
+    const messageHTML = `
+        <div id="${messageId}" class="message ai loading">
+            <div class="message-content">
+                <div class="typing-indicator">
+                    <span></span>
+                    <span></span>
+                    <span></span>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    chatMessages.insertAdjacentHTML('beforeend', messageHTML);
+    scrollToBottom();
+    
+    return messageId;
+}
+
+// 移除加载消息函数 - 移到全局作用域
+function removeLoadingMessage(messageId) {
+    if (!messageId) return;
+    
+    const loadingMessage = document.getElementById(messageId);
+    if (loadingMessage) {
+        loadingMessage.remove();
+    }
+}
+
+// 添加错误消息函数 - 移到全局作用域
+function addErrorMessage(errorText) {
+    if (!chatMessages) return;
+    
+    const messageId = 'msg-' + (++messageCounter);
+    
+    const messageHTML = `
+        <div id="${messageId}" class="message ai error">
+            <div class="message-content">
+                <div class="error-message">
+                    <i class="fas fa-exclamation-triangle"></i>
+                    <p>${errorText}</p>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    chatMessages.insertAdjacentHTML('beforeend', messageHTML);
+    scrollToBottom();
+}
+
 document.addEventListener('DOMContentLoaded', function() {
     console.log('[DEBUG] DOMContentLoaded event fired. Initializing app...');
+
+    // 获取DOM元素 - 聊天界面元素 (修正选择器)
+    chatMessages = document.getElementById('chatMessages');
+    chatInput = document.getElementById('chatInput');
+    translateBtn = document.getElementById('translateBtn');
+    polishBtn = document.getElementById('polishBtn');
+    uploadImageBtn = document.getElementById('uploadBtn');
+    imageUpload = document.getElementById('imageUpload');
+    const sourceLang = document.getElementById('sourceLanguage');
+    const targetLang = document.getElementById('targetLanguage');
+    const newChatBtn = document.getElementById('newChatBtn');
+    const clearChatsBtn = document.getElementById('clearChatsBtn');
+    conversationList = document.getElementById('conversationList');
+    
+    // 获取设置相关元素
+    const translateSettingsBtn = document.getElementById('translateSettingsBtn');
+    const polishSettingsBtn = document.getElementById('polishSettingsBtn');
+    const translateSettingsPanel = document.getElementById('translateSettings');
+    const polishSettingsPanel = document.getElementById('polishSettings');
+    const closeSettingsBtns = document.querySelectorAll('.close-settings-btn');
+    const polishStyle = document.getElementById('polishStyle');
+    
+    // 通用元素
+    const loadingOverlay = document.getElementById('loading-overlay');
+    const notification = document.getElementById('notification');
+    const notificationMessage = document.getElementById('notification-message');
+    
+    console.log('DOM元素检查：', {
+        chatMessages: !!chatMessages,
+        chatInput: !!chatInput,
+        translateBtn: !!translateBtn,
+        polishBtn: !!polishBtn,
+        uploadImageBtn: !!uploadImageBtn,
+        imageUpload: !!imageUpload,
+        translateSettingsBtn: !!translateSettingsBtn,
+        polishSettingsBtn: !!polishSettingsBtn,
+        newChatBtn: !!newChatBtn,
+        clearChatsBtn: !!clearChatsBtn
+    });
+    
+    // 输入框事件监听
+    if (chatInput) {
+        chatInput.addEventListener('input', autoResizeInput);
+        chatInput.addEventListener('change', autoResizeInput);
+        chatInput.addEventListener('focus', autoResizeInput);
+        chatInput.addEventListener('paste', function() {
+            setTimeout(autoResizeInput, 10);
+        });
+        chatInput.addEventListener('keydown', function(e) {
+            if (e.key === 'Backspace' || e.key === 'Delete') {
+                setTimeout(autoResizeInput, 10);
+            }
+        });
+        
+        console.log('输入框事件监听已绑定');
+    }
 
     // 获取DOM元素 - 通用元素
     const tabBtns = document.querySelectorAll('.tab-btn');
     const tabContents = document.querySelectorAll('.tab-content');
-    const loadingOverlay = document.getElementById('loading-overlay');
-    const notification = document.getElementById('notification');
-    const notificationMessage = document.getElementById('notification-message');
     
     // （已移除API密钥相关元素）
     let apiKeyModal = document.getElementById('api-key-modal');
@@ -122,12 +691,7 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // 获取DOM元素 - 输入区域
     const uploadArea = document.getElementById('upload-area');
-    const imageUpload = document.getElementById('image-upload');
     const imagePreview = document.getElementById('image-preview');
-    const translateBtn = document.getElementById('translate-btn');
-    const sourceText = document.getElementById('source-text');
-    const sourceLang = document.getElementById('source-lang');
-    const targetLang = document.getElementById('target-lang');
     
     // 获取DOM元素 - 结果区域
     const resultContent = document.getElementById('result-content');
@@ -151,63 +715,74 @@ document.addEventListener('DOMContentLoaded', function() {
     let currentMode = 'translate'; // translate, edit, polish
     let translationResult = '';
     
-    // 部分标签切换功能
-    sectionLabels.forEach(label => {
-        label.addEventListener('click', () => {
-            const sectionId = label.id.split('-')[1]; // 获取部分ID: translate, edit, polish
-            
-            // 更新活动标签
-            sectionLabels.forEach(l => l.classList.remove('active'));
-            label.classList.add('active');
-            
-            // 切换模式
-            switchMode(sectionId);
+    // 部分标签切换功能 - 添加null检查
+    if (sectionLabels.length > 0) {
+        sectionLabels.forEach(label => {
+            label.addEventListener('click', () => {
+                const sectionId = label.id.split('-')[1]; // 获取部分ID: translate, edit, polish
+                
+                // 更新活动标签
+                sectionLabels.forEach(l => l.classList.remove('active'));
+                label.classList.add('active');
+                
+                // 切换模式
+                switchMode(sectionId);
+            });
         });
-    });
+    }
     
-    // 标签页切换功能
-    tabBtns.forEach(btn => {
-        btn.addEventListener('click', () => {
-            const tabId = btn.getAttribute('data-tab');
-            
-            // 更新活动标签按钮
-            tabBtns.forEach(b => b.classList.remove('active'));
-            btn.classList.add('active');
-            
-            // 更新活动内容区域
-            tabContents.forEach(content => content.classList.remove('active'));
-            document.getElementById(`${tabId}-input`).classList.add('active');
+    // 标签页切换功能 - 添加null检查
+    if (tabBtns.length > 0) {
+        tabBtns.forEach(btn => {
+            btn.addEventListener('click', () => {
+                const tabId = btn.getAttribute('data-tab');
+                
+                // 更新活动标签按钮
+                tabBtns.forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                
+                // 更新活动内容区域
+                tabContents.forEach(content => content.classList.remove('active'));
+                const targetContent = document.getElementById(`${tabId}-input`);
+                if (targetContent) {
+                    targetContent.classList.add('active');
+                }
+            });
         });
-    });
+    }
     
-    // 图片上传功能
-    uploadArea.addEventListener('click', () => {
-        imageUpload.click();
-    });
-    
-    uploadArea.addEventListener('dragover', (e) => {
-        e.preventDefault();
-        uploadArea.classList.add('active');
-    });
-    
-    uploadArea.addEventListener('dragleave', () => {
-        uploadArea.classList.remove('active');
-    });
-    
-    uploadArea.addEventListener('drop', (e) => {
-        e.preventDefault();
-        uploadArea.classList.remove('active');
+    // 图片上传功能 - 添加null检查
+    if (uploadArea && imageUpload) {
+        uploadArea.addEventListener('click', () => {
+            imageUpload.click();
+        });
         
-        if (e.dataTransfer.files.length) {
-            handleImageUpload(e.dataTransfer.files[0]);
-        }
-    });
+        uploadArea.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadArea.classList.add('active');
+        });
+        
+        uploadArea.addEventListener('dragleave', () => {
+            uploadArea.classList.remove('active');
+        });
+        
+        uploadArea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadArea.classList.remove('active');
+            
+            if (e.dataTransfer.files.length) {
+                handleImageUpload(e.dataTransfer.files[0]);
+            }
+        });
+    }
     
-    imageUpload.addEventListener('change', (e) => {
-        if (e.target.files.length) {
-            handleImageUpload(e.target.files[0]);
-        }
-    });
+    if (imageUpload) {
+        imageUpload.addEventListener('change', (e) => {
+            if (e.target.files.length) {
+                handleImageUpload(e.target.files[0]);
+            }
+        });
+    }
     
     function handleImageUpload(file) {
         if (!file.type.match('image.*')) {
@@ -218,27 +793,31 @@ document.addEventListener('DOMContentLoaded', function() {
         const reader = new FileReader();
         
         reader.onload = function(e) {
-            uploadArea.classList.add('hidden');
-            imagePreview.classList.remove('hidden');
+            if (uploadArea) uploadArea.classList.add('hidden');
+            if (imagePreview) imagePreview.classList.remove('hidden');
             
             // 创建图片预览
-            imagePreview.innerHTML = `
-                <div class="preview-container">
-                    <img src="${e.target.result}" alt="上传的图片">
-                    <button class="remove-btn" title="移除图片">
-                        <i class="fas fa-times"></i>
-                    </button>
-                </div>
-                <p class="image-info">图片已上传，点击翻译按钮开始处理</p>
-            `;
-            
-            // 添加移除图片的功能
-            const removeBtn = imagePreview.querySelector('.remove-btn');
-            removeBtn.addEventListener('click', () => {
-                imagePreview.classList.add('hidden');
-                uploadArea.classList.remove('hidden');
-                imageUpload.value = '';
-            });
+            if (imagePreview) {
+                imagePreview.innerHTML = `
+                    <div class="preview-container">
+                        <img src="${e.target.result}" alt="上传的图片">
+                        <button class="remove-btn" title="移除图片">
+                            <i class="fas fa-times"></i>
+                        </button>
+                    </div>
+                    <p class="image-info">图片已上传，点击翻译按钮开始处理</p>
+                `;
+                
+                // 添加移除图片的功能
+                const removeBtn = imagePreview.querySelector('.remove-btn');
+                if (removeBtn) {
+                    removeBtn.addEventListener('click', () => {
+                        imagePreview.classList.add('hidden');
+                        if (uploadArea) uploadArea.classList.remove('hidden');
+                        if (imageUpload) imageUpload.value = '';
+                    });
+                }
+            }
         };
         
         reader.readAsDataURL(file);
@@ -375,112 +954,267 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 
-    // 翻译功能
-    translateBtn.addEventListener('click', () => {
-        // 获取当前活动的输入类型
-        const activeTab = document.querySelector('.tab-btn.active').getAttribute('data-tab');
-        
-        // 获取选中的翻译服务 (注意 name 属性已改为 translate-service)
-        const selectedService = document.querySelector('input[name="translate-service"]:checked').value;
-        
-        // 获取源语言和目标语言
-        const fromLang = sourceLang.value;
-        const toLang = targetLang.value;
-        
-        // 检查输入
-        if (activeTab === 'text' && !sourceText.value.trim()) {
-            showNotification('请输入需要翻译的文本');
-            return;
-        }
-        
-        if (activeTab === 'image' && imagePreview.classList.contains('hidden')) {
-            showNotification('请上传需要翻译的图片');
-            return;
-        }
-        
-        // 添加加载状态到按钮
-        translateBtn.classList.add('loading');
-        translateBtn.disabled = true;
-        
-        // 显示中心加载提示
-        const serviceName = getServiceDisplayName(selectedService);
-        const fromLangName = getLanguageName(fromLang);
-        const toLangName = getLanguageName(toLang);
-        
-        // 根据服务类型决定是否显示网络状态
-        // 对于OpenAI和Gemini这样需要国际网络的服务，显示网络连接状态
-        const needsNetworkCheck = ['gpt', 'gemini'].includes(selectedService);
-        
-        showCenterLoading(
-            `正在使用${serviceName}翻译`, 
-            `从 ${fromLangName} 到 ${toLangName}`,
-            needsNetworkCheck // 只在OpenAI和Gemini服务时显示网络状态
-        );
-        
-        // 不显示全局加载遮罩，改用中心加载提示
-        // loadingOverlay.classList.remove('hidden');
-        
-        // 准备请求数据
-        let requestData = {};
-        let endpoint = '';
-        
-        if (activeTab === 'text') {
-            // 文本翻译请求
-            requestData = {
-                text: sourceText.value.trim(),
-                sourceLang: fromLang,
-                targetLang: toLang,
-                service: selectedService
-            };
-            endpoint = '/api/translate/text';
-        } else {
-            // 图片翻译请求 - 需要使用FormData
-            const formData = new FormData();
-            formData.append('image', imageUpload.files[0]);
-            formData.append('sourceLang', fromLang);
-            formData.append('targetLang', toLang);
-            formData.append('service', selectedService);
+    // 翻译功能 - 修改为聊天界面
+    if (translateBtn) {
+        translateBtn.addEventListener('click', async () => {
+            console.log('翻译按钮点击 - 聊天界面版本');
             
-            requestData = formData;
-            endpoint = '/api/translate/image';
-        }
-        
-        // 发送API请求
-        if (activeTab === 'text') {
-            // 文本翻译 - 使用JSON
-            fetch(endpoint, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify(requestData)
-            })
-            .then(response => response.json())
-            .then(data => handleTranslationResponse(data, activeTab))
-            .catch(error => {
-                console.error('翻译请求失败:', error);
-                showNotification('翻译失败: ' + error.message, 'error');
-                
-                // 移除加载状态
-                removeLoadingElements();
+            const inputText = chatInput ? chatInput.value.trim() : '';
+            const hasImage = currentImageFile !== null;
+            
+            console.log('翻译检查状态:', {
+                inputText: inputText.substring(0, 20) + '...',
+                hasImage: hasImage,
+                currentImageFile: !!currentImageFile
             });
-        } else {
-            // 图片翻译 - 使用FormData
-            fetch(endpoint, {
-                method: 'POST',
-                body: requestData // FormData不需要设置Content-Type
-            })
-            .then(response => response.json())
-            .then(data => handleTranslationResponse(data, activeTab))
-            .catch(error => {
-                console.error('图片翻译请求失败:', error);
-                showNotification('图片翻译失败: ' + error.message, 'error');
+            
+            // 检查是否有输入
+            if (!inputText && !hasImage) {
+                showNotification('请输入文本或上传图片');
+                return;
+            }
+            
+            // 获取选中的服务
+            const selectedService = document.querySelector('input[name="translate-service"]:checked');
+            if (!selectedService) {
+                showNotification('请选择翻译服务');
+                return;
+            }
+            
+            // 获取语言设置
+            const fromLang = sourceLang ? sourceLang.value : 'auto';
+            const toLang = targetLang ? targetLang.value : 'zh';
+            
+            // 添加用户消息到聊天区域
+            addUserMessage(inputText, hasImage ? currentImageFile : null);
+            
+            // 添加加载消息
+            const loadingMessageId = addLoadingMessage();
+            
+            // 保存当前图片文件（在清空状态之前）
+            const savedImageFile = currentImageFile;
+            
+            // 清空输入框和图片状态
+            if (chatInput) chatInput.value = '';
+            clearImageState();
+            
+            try {
+                let result;
                 
-                // 移除加载状态
-                removeLoadingElements();
-            });
-        }
-    });
+                if (hasImage) {
+                    // 图片翻译
+                    const formData = new FormData();
+                    formData.append('image', savedImageFile);
+                    formData.append('sourceLang', fromLang);
+                    formData.append('targetLang', toLang);
+                    formData.append('service', selectedService.value);
+                    
+                    const response = await fetch('/api/translate/image', {
+                        method: 'POST',
+                        body: formData
+                    });
+                    
+                    if (!response.ok) {
+                        const errorData = await response.json();
+                        throw new Error(errorData.error || '图片翻译请求失败');
+                    }
+                    
+                    const data = await response.json();
+                    result = data.result;
+                } else {
+                    // 文本翻译
+                    const requestBody = {
+                        text: inputText,
+                        sourceLang: fromLang,
+                        targetLang: toLang,
+                        service: selectedService.value
+                    };
+                    
+                    const response = await fetch('/api/translate/text', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify(requestBody)
+                    });
+                    
+                    if (!response.ok) {
+                        const errorData = await response.json();
+                        throw new Error(errorData.error || '文本翻译请求失败');
+                    }
+                    
+                    const data = await response.json();
+                    result = data.result;
+                }
+                
+                // 移除加载消息
+                removeLoadingMessage(loadingMessageId);
+                
+                // 添加翻译结果消息
+                addAITranslationMessage(result);
+                
+                // 滚动到底部
+                scrollToBottom();
+                
+                // 触发输入框高度调整
+                setTimeout(autoResizeInput, 0);
+                
+            } catch (error) {
+                console.error('翻译错误:', error);
+                
+                // 移除加载消息
+                removeLoadingMessage(loadingMessageId);
+                
+                // 使用友好的错误处理
+                if (window.TranOptimErrorHandler) {
+                    const context = { 
+                        type: hasImage ? 'image' : 'text',
+                        service: selectedService.value,
+                        operation: 'translate'
+                    };
+                    window.TranOptimErrorHandler.showUserFriendlyError(error, context);
+                } else {
+                    // 添加错误消息
+                    addErrorMessage(error.message || '翻译失败，请稍后再试');
+                }
+                
+                // 滚动到底部
+                scrollToBottom();
+            }
+        });
+    }
+    
+    // 润色功能 - 修改为聊天界面
+    if (polishBtn) {
+        polishBtn.addEventListener('click', async () => {
+            console.log('润色按钮点击 - 聊天界面版本');
+            
+            const inputText = chatInput ? chatInput.value.trim() : '';
+            
+            // 检查是否有输入
+            if (!inputText) {
+                showNotification('请输入需要润色的文本');
+                return;
+            }
+            
+            // 获取选中的润色服务
+            const selectedService = document.querySelector('input[name="polish-service"]:checked');
+            if (!selectedService) {
+                showNotification('请选择润色服务');
+                return;
+            }
+            
+            // 添加用户消息到聊天区域
+            addUserMessage(inputText);
+            
+            // 添加加载消息
+            const loadingMessageId = addLoadingMessage();
+            
+            // 清空输入框
+            if (chatInput) chatInput.value = '';
+            
+            try {
+                // 构建请求体 - 使用新的多风格润色
+                const requestBody = {
+                    text: inputText,
+                    service: selectedService.value,
+                    multiStyle: true  // 请求多种风格结果
+                };
+                
+                console.log('发送润色请求:', requestBody);
+                
+                const response = await fetch('/api/polish/text', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(requestBody)
+                });
+                
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.error || '润色请求失败');
+                }
+                
+                const data = await response.json();
+                console.log('润色响应数据:', data);
+                
+                if (!data || !data.result) {
+                    throw new Error('服务器返回数据结构无效');
+                }
+                
+                // 移除加载消息
+                removeLoadingMessage(loadingMessageId);
+                
+                // 添加润色结果到聊天区域
+                addAIPolishMessage(data.result);
+                
+                // 滚动到底部
+                scrollToBottom();
+                
+                // 触发输入框高度调整
+                setTimeout(autoResizeInput, 0);
+                
+            } catch (error) {
+                console.error('润色错误:', error);
+                
+                // 移除加载消息
+                removeLoadingMessage(loadingMessageId);
+                
+                // 使用友好的错误处理
+                if (window.TranOptimErrorHandler) {
+                    const context = { 
+                        type: 'text',
+                        service: selectedService.value,
+                        operation: 'polish'
+                    };
+                    window.TranOptimErrorHandler.showUserFriendlyError(error, context);
+                } else {
+                    // 添加错误消息
+                    addErrorMessage('润色失败: ' + error.message);
+                }
+                
+                // 滚动到底部
+                scrollToBottom();
+            }
+        });
+    }
+    
+    // 新对话按钮事件
+    if (newChatBtn) {
+        newChatBtn.addEventListener('click', () => {
+            console.log('点击新对话按钮 - 聊天界面版本');
+            
+            // 创建新对话
+            createNewConversation();
+            
+            showNotification('已创建新对话');
+        });
+    }
+    
+    // 清空对话按钮事件
+    if (clearChatsBtn) {
+        clearChatsBtn.addEventListener('click', () => {
+            if (confirm('确定要清空所有对话记录吗？此操作不可恢复。')) {
+                // 清空对话数组
+                conversations = [];
+                
+                // 清空本地存储
+                localStorage.removeItem('tranoptim-conversations');
+                
+                // 创建新对话
+                createNewConversation();
+                
+                showNotification('所有对话记录已清空');
+            }
+        });
+    }
+    
+    // 初始化对话管理器
+    initConversationManager();
+    
+    // 初始化图片粘贴支持
+    setupImagePasteSupport();
     
     // 处理翻译响应
     function handleTranslationResponse(data, activeTab) {
@@ -614,8 +1348,10 @@ document.addEventListener('DOMContentLoaded', function() {
     // 移除加载元素
     function removeLoadingElements() {
         // 移除按钮的加载状态
-        translateBtn.classList.remove('loading');
-        translateBtn.disabled = false;
+        if (translateBtn) {
+            translateBtn.classList.remove('loading');
+            translateBtn.disabled = false;
+        }
         
         // 移除中心加载提示
         hideCenterLoading();
@@ -640,172 +1376,203 @@ document.addEventListener('DOMContentLoaded', function() {
         return langNames[langCode] || langCode;
     }
     
-    // 点击翻译结果区域直接进入编辑模式
-    resultContent.addEventListener('click', () => {
-        if (resultContent.textContent !== '翻译结果将显示在这里...' && !resultContent.classList.contains('hidden')) {
+    // 点击翻译结果区域直接进入编辑模式 - 添加null检查
+    if (resultContent) {
+        resultContent.addEventListener('click', () => {
+            if (resultContent.textContent !== '翻译结果将显示在这里...' && !resultContent.classList.contains('hidden')) {
+                switchToEditMode();
+            }
+        });
+    }
+    
+    // 编辑按钮功能 - 添加null检查
+    if (editResultBtn) {
+        editResultBtn.addEventListener('click', () => {
             switchToEditMode();
-        }
-    });
+        });
+    }
     
-    // 编辑按钮功能
-    editResultBtn.addEventListener('click', () => {
-        switchToEditMode();
-    });
+    // 润色按钮功能 - 添加null检查
+    if (polishResultBtn) {
+        polishResultBtn.addEventListener('click', () => {
+            switchToPolishMode();
+        });
+    }
     
-    // 润色按钮功能
-    polishResultBtn.addEventListener('click', () => {
-        switchToPolishMode();
-    });
-    
-    // 复制结果功能
-    copyResultBtn.addEventListener('click', () => {
-        if (resultContent.textContent === '翻译结果将显示在这里...') {
-            return;
-        }
-        
-        copyTextToClipboard(resultContent.textContent);
-        showNotification('已复制到剪贴板！');
-    });
-    
-    // 复制润色结果功能
-    copyPolishResultBtn.addEventListener('click', () => {
-        if (polishResult.textContent === '润色结果将显示在这里...') {
-            return;
-        }
-        
-        copyTextToClipboard(polishResult.textContent);
-        showNotification('已复制到剪贴板！');
-    });
-    
-    // 开始润色按钮点击事件
-    startPolishBtn.addEventListener('click', function() {
-        console.log('--- 双重润色请求开始 ---');
-        // 获取要润色的文本
-        const textToPolish = editText.value || translationResult;
-        
-        // 检查文本是否为空
-        if (!textToPolish.trim()) {
-            showNotification('请先输入或翻译内容');
-            return;
-        }
-        
-        // 获取选中的润色服务
-        const selectedService = document.querySelector('input[name="polish-service"]:checked').value;
-        
-        // 添加加载效果
-        startPolishBtn.disabled = true;
-        
-        // 显示中心加载提示
-        const serviceName = getServiceDisplayName(selectedService);
-        
-        // 根据服务类型决定是否显示网络状态
-        const needsNetworkCheck = ['gpt', 'gemini'].includes(selectedService);
-        
-        showCenterLoading(
-            `正在使用${serviceName}润色文本`,
-            `同时生成两种风格的润色结果`,
-            needsNetworkCheck
-        );
-        
-        // 显示结果区域但先清空
-        polishResultArea.classList.remove('hidden');
-        polishResult.innerHTML = '<div class="loading-placeholder">正在润色文本，请稍候...</div>';
-        
-        // 准备请求数据
-        const requestData = {
-            text: textToPolish,
-            service: selectedService
-        };
-        
-        // 添加安全超时，确保加载提示最终会被移除
-        const safetyTimeout = setTimeout(() => {
-            console.log('润色安全超时触发：强制移除加载状态');
-            startPolishBtn.disabled = false;
-            hideCenterLoading();
-            showNotification('润色请求处理时间过长，已自动停止等待', 'warning');
-        }, 10000); // 10秒超时（因为现在处理两种润色结果需要更多时间）
-
-        // 发送润色请求到新的双重润色接口
-        fetch('/api/polish/dual', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify(requestData)
-        })
-        .then(response => response.json())
-        .then(data => {
-            console.log('双重润色响应:', data);
-            
-            // 清除安全超时
-            clearTimeout(safetyTimeout);
-            
-            // 移除加载状态
-            startPolishBtn.disabled = false;
-            hideCenterLoading();
-            
-            // 检查响应
-            if (data.error && !data.result) {
-                // 显示错误
-                polishResult.innerHTML = `
-                    <div class="error-result">
-                        <p><i class="fas fa-exclamation-circle"></i> 润色失败</p>
-                        <p class="error-message">${data.error}</p>
-                    </div>
-                `;
-                showNotification('润色失败: ' + data.error);
+    // 复制结果功能 - 添加null检查
+    if (copyResultBtn) {
+        copyResultBtn.addEventListener('click', () => {
+            if (resultContent && resultContent.textContent === '翻译结果将显示在这里...') {
                 return;
             }
             
-            if (!data.result) {
-                polishResult.innerHTML = `
-                    <div class="error-result">
-                        <p><i class="fas fa-exclamation-circle"></i> 润色失败</p>
-                        <p class="error-message">服务器返回了空结果</p>
-                    </div>
-                `;
-                showNotification('润色失败: 服务器返回了空结果');
+            if (resultContent) {
+                copyTextToClipboard(resultContent.textContent);
+                showNotification('已复制到剪贴板！');
+            }
+        });
+    }
+    
+    // 复制润色结果功能 - 添加null检查
+    if (copyPolishResultBtn) {
+        copyPolishResultBtn.addEventListener('click', () => {
+            if (polishResult && polishResult.textContent === '润色结果将显示在这里...') {
                 return;
             }
             
-            // 显示双重润色结果
-            displayDualPolishResult(
-                data.result.originalText, 
-                data.result.normalText, 
-                data.result.rephraseText, 
-                data.result.service
+            if (polishResult) {
+                copyTextToClipboard(polishResult.textContent);
+                showNotification('已复制到剪贴板！');
+            }
+        });
+    }
+    
+    // 开始润色按钮点击事件 - 添加null检查
+    if (startPolishBtn) {
+        startPolishBtn.addEventListener('click', function() {
+            console.log('--- 双重润色请求开始 ---');
+            // 获取要润色的文本
+            const textToPolish = (editText ? editText.value : '') || translationResult;
+            
+            // 检查文本是否为空
+            if (!textToPolish.trim()) {
+                showNotification('请先输入或翻译内容');
+                return;
+            }
+            
+            // 获取选中的润色服务
+            const selectedServiceEl = document.querySelector('input[name="polish-service"]:checked');
+            if (!selectedServiceEl) {
+                showNotification('请选择润色服务');
+                return;
+            }
+            const selectedService = selectedServiceEl.value;
+            
+            // 添加加载效果
+            startPolishBtn.disabled = true;
+            
+            // 显示中心加载提示
+            const serviceName = getServiceDisplayName(selectedService);
+            
+            // 根据服务类型决定是否显示网络状态
+            const needsNetworkCheck = ['gpt', 'gemini'].includes(selectedService);
+            
+            showCenterLoading(
+                `正在使用${serviceName}润色文本`,
+                `同时生成两种风格的润色结果`,
+                needsNetworkCheck
             );
             
-            // 显示成功通知
-            showNotification('双重润色完成！');
-        })
-        .catch(error => {
-            console.error('润色请求失败:', error);
+            // 显示结果区域但先清空
+            if (polishResultArea) {
+                polishResultArea.classList.remove('hidden');
+            }
+            if (polishResult) {
+                polishResult.innerHTML = '<div class="loading-placeholder">正在润色文本，请稍候...</div>';
+            }
             
-            // 清除安全超时
-            clearTimeout(safetyTimeout);
+            // 准备请求数据
+            const requestData = {
+                text: textToPolish,
+                service: selectedService
+            };
             
-            // 移除加载状态
-            startPolishBtn.disabled = false;
-            hideCenterLoading();
-            
-            // 显示错误
-            polishResult.innerHTML = `
-                <div class="error-result">
-                    <p><i class="fas fa-exclamation-circle"></i> 润色请求失败</p>
-                    <p class="error-message">${error.message}</p>
-                </div>
-            `;
-            
-            showNotification('润色失败: ' + error.message);
-        })
-        .finally(() => {
-            // 再次确保加载状态被清除（双重保障）
-            startPolishBtn.disabled = false;
-            hideCenterLoading();
-            console.log('润色处理完成：所有加载状态已移除');
+            // 添加安全超时，确保加载提示最终会被移除
+            const safetyTimeout = setTimeout(() => {
+                console.log('润色安全超时触发：强制移除加载状态');
+                startPolishBtn.disabled = false;
+                hideCenterLoading();
+                showNotification('润色请求处理时间过长，已自动停止等待', 'warning');
+            }, 10000); // 10秒超时（因为现在处理两种润色结果需要更多时间）
+
+            // 发送润色请求到新的双重润色接口
+            fetch('/api/polish/dual', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(requestData)
+            })
+            .then(response => response.json())
+            .then(data => {
+                console.log('双重润色响应:', data);
+                
+                // 清除安全超时
+                clearTimeout(safetyTimeout);
+                
+                // 移除加载状态
+                startPolishBtn.disabled = false;
+                hideCenterLoading();
+                
+                // 检查响应
+                if (data.error && !data.result) {
+                    // 显示错误
+                    if (polishResult) {
+                        polishResult.innerHTML = `
+                            <div class="error-result">
+                                <p><i class="fas fa-exclamation-circle"></i> 润色失败</p>
+                                <p class="error-message">${data.error}</p>
+                            </div>
+                        `;
+                    }
+                    showNotification('润色失败: ' + data.error);
+                    return;
+                }
+                
+                if (!data.result) {
+                    if (polishResult) {
+                        polishResult.innerHTML = `
+                            <div class="error-result">
+                                <p><i class="fas fa-exclamation-circle"></i> 润色失败</p>
+                                <p class="error-message">服务器返回了空结果</p>
+                            </div>
+                        `;
+                    }
+                    showNotification('润色失败: 服务器返回了空结果');
+                    return;
+                }
+                
+                // 显示双重润色结果
+                displayDualPolishResult(
+                    data.result.originalText, 
+                    data.result.normalText, 
+                    data.result.rephraseText, 
+                    data.result.service
+                );
+                
+                // 显示成功通知
+                showNotification('双重润色完成！');
+            })
+            .catch(error => {
+                console.error('润色请求失败:', error);
+                
+                // 清除安全超时
+                clearTimeout(safetyTimeout);
+                
+                // 移除加载状态
+                startPolishBtn.disabled = false;
+                hideCenterLoading();
+                
+                // 显示错误
+                if (polishResult) {
+                    polishResult.innerHTML = `
+                        <div class="error-result">
+                            <p><i class="fas fa-exclamation-circle"></i> 润色请求失败</p>
+                            <p class="error-message">${error.message}</p>
+                        </div>
+                    `;
+                }
+                
+                showNotification('润色失败: ' + error.message);
+            })
+            .finally(() => {
+                // 再次确保加载状态被清除（双重保障）
+                startPolishBtn.disabled = false;
+                hideCenterLoading();
+                console.log('润色处理完成：所有加载状态已移除');
+            });
         });
-    });
+    }
     
     // 获取润色风格名称
     function getPolishStyleName(styleCode) {
@@ -947,41 +1714,6 @@ document.addEventListener('DOMContentLoaded', function() {
         
         // 更新当前模式
         currentMode = 'polish';
-    }
-    
-    // 显示通知函数
-    function showNotification(message, type = 'success') {
-        notificationMessage.textContent = message;
-        
-        // 更新通知样式
-        notification.className = 'notification';
-        notification.classList.add('show');
-        notification.classList.add(`notification-${type}`);
-        
-        setTimeout(() => {
-            notification.classList.remove('show');
-            // 延迟后移除类型样式
-            setTimeout(() => {
-                notification.classList.remove(`notification-${type}`);
-            }, 300);
-        }, 3000);
-    }
-    
-    // 复制文本到剪贴板函数
-    function copyTextToClipboard(text) {
-        const tempElement = document.createElement('textarea');
-        tempElement.value = text;
-        document.body.appendChild(tempElement);
-        tempElement.select();
-        document.execCommand('copy');
-        document.body.removeChild(tempElement);
-    }
-    
-    // 从HTML中提取纯文本
-    function getPlainTextFromHTML(html) {
-        const tempDiv = document.createElement('div');
-        tempDiv.innerHTML = html;
-        return tempDiv.textContent || tempDiv.innerText || '';
     }
     
     // 模拟翻译功能
@@ -1139,21 +1871,37 @@ document.addEventListener('DOMContentLoaded', function() {
         `;
         
         try {
-            // 设置润色结果内容
-            document.getElementById('polish-result').innerHTML = resultHTML;
+            // 设置润色结果内容 - 添加null检查
+            const polishResultElement = document.getElementById('polish-result');
+            if (polishResultElement) {
+                polishResultElement.innerHTML = resultHTML;
+                console.log('[displayDualPolishResult] HTML 设置成功');
+            } else {
+                console.warn('[displayDualPolishResult] polish-result 元素不存在');
+            }
             
-            // 显示润色结果区域
-            document.getElementById('polish-result-area').classList.remove('hidden');
-            console.log('[displayDualPolishResult] HTML 设置成功');
+            // 显示润色结果区域 - 添加null检查
+            const polishResultAreaElement = document.getElementById('polish-result-area');
+            if (polishResultAreaElement) {
+                polishResultAreaElement.classList.remove('hidden');
+            } else {
+                console.warn('[displayDualPolishResult] polish-result-area 元素不存在');
+            }
         } catch (e) {
             console.error('[displayDualPolishResult] 设置 innerHTML 失败:', e);
         }
         
-        // 隐藏设置区域
-        document.getElementById('polish-options-area').classList.add('hidden');
+        // 隐藏设置区域 - 添加null检查
+        const polishOptionsAreaElement = document.getElementById('polish-options-area');
+        if (polishOptionsAreaElement) {
+            polishOptionsAreaElement.classList.add('hidden');
+        }
         
-        // 滚动到结果区域
-        document.getElementById('polish-result-area').scrollIntoView({ behavior: 'smooth' });
+        // 滚动到结果区域 - 添加null检查
+        const scrollTargetElement = document.getElementById('polish-result-area');
+        if (scrollTargetElement) {
+            scrollTargetElement.scrollIntoView({ behavior: 'smooth' });
+        }
         console.log('[displayDualPolishResult] 双重润色结果显示完毕');
     }
 
@@ -1190,26 +1938,150 @@ document.addEventListener('DOMContentLoaded', function() {
         `;
         
         try {
-            // 设置润色结果内容
-            document.getElementById('polish-result').innerHTML = resultHTML;
+            // 设置润色结果内容 - 添加null检查
+            const polishResultElement = document.getElementById('polish-result');
+            if (polishResultElement) {
+                polishResultElement.innerHTML = resultHTML;
+                console.log('[displayPolishResult] HTML 设置成功');
+            } else {
+                console.warn('[displayPolishResult] polish-result 元素不存在');
+            }
             
-            // 显示润色结果区域
-            document.getElementById('polish-result-area').classList.remove('hidden');
-            console.log('[displayPolishResult] HTML 设置成功');
+            // 显示润色结果区域 - 添加null检查
+            const polishResultAreaElement = document.getElementById('polish-result-area');
+            if (polishResultAreaElement) {
+                polishResultAreaElement.classList.remove('hidden');
+            } else {
+                console.warn('[displayPolishResult] polish-result-area 元素不存在');
+            }
         } catch (e) {
             console.error('[displayPolishResult] 设置 innerHTML 失败:', e);
         }
         
-        // 隐藏设置区域
-        document.getElementById('polish-options-area').classList.add('hidden');
+        // 隐藏设置区域 - 添加null检查
+        const polishOptionsAreaElement = document.getElementById('polish-options-area');
+        if (polishOptionsAreaElement) {
+            polishOptionsAreaElement.classList.add('hidden');
+        }
         
-        // 滚动到结果区域
-        document.getElementById('polish-result-area').scrollIntoView({ behavior: 'smooth' });
+        // 滚动到结果区域 - 添加null检查
+        const scrollTargetElement = document.getElementById('polish-result-area');
+        if (scrollTargetElement) {
+            scrollTargetElement.scrollIntoView({ behavior: 'smooth' });
+        }
         console.log('[displayPolishResult] 结果显示完毕');
     }
 
     if (apiKeyModal) {
         apiKeyModal.classList.add('hidden');
+    }
+    
+    // 图片上传按钮事件
+    if (uploadImageBtn) {
+        uploadImageBtn.addEventListener('click', () => {
+            console.log('图片上传按钮点击');
+            if (imageUpload) {
+                imageUpload.click();
+            }
+        });
+    }
+    
+    // 图片文件选择事件
+    if (imageUpload) {
+        imageUpload.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (file && file.type.startsWith('image/')) {
+                currentImageFile = file;
+                console.log('图片文件已选择:', file.name);
+                
+                // 更新按钮文本以显示已选择图片
+                if (uploadImageBtn) {
+                    uploadImageBtn.innerHTML = '<i class="fas fa-image"></i> ' + file.name.substring(0, 10) + '...';
+                    uploadImageBtn.style.backgroundColor = '#28a745';
+                }
+                
+                showNotification('图片已选择: ' + file.name);
+            } else {
+                showNotification('请选择有效的图片文件');
+                currentImageFile = null;
+                if (uploadImageBtn) {
+                    uploadImageBtn.innerHTML = '<i class="fas fa-image"></i> 图片';
+                    uploadImageBtn.style.backgroundColor = '';
+                }
+            }
+        });
+    }
+    
+    // 设置面板按钮事件
+    if (translateSettingsBtn) {
+        translateSettingsBtn.addEventListener('click', () => {
+            console.log('翻译设置按钮点击');
+            
+            // 切换翻译设置面板显示/隐藏
+            if (translateSettingsPanel) {
+                if (translateSettingsPanel.style.display === 'block') {
+                    translateSettingsPanel.style.display = 'none';
+                } else {
+                    translateSettingsPanel.style.display = 'block';
+                    // 隐藏润色设置面板
+                    if (polishSettingsPanel) {
+                        polishSettingsPanel.style.display = 'none';
+                    }
+                }
+            }
+        });
+    }
+    
+    if (polishSettingsBtn) {
+        polishSettingsBtn.addEventListener('click', () => {
+            console.log('润色设置按钮点击');
+            
+            // 切换润色设置面板显示/隐藏
+            if (polishSettingsPanel) {
+                if (polishSettingsPanel.style.display === 'block') {
+                    polishSettingsPanel.style.display = 'none';
+                } else {
+                    polishSettingsPanel.style.display = 'block';
+                    // 隐藏翻译设置面板
+                    if (translateSettingsPanel) {
+                        translateSettingsPanel.style.display = 'none';
+                    }
+                }
+            }
+        });
+    }
+    
+    // 关闭设置面板按钮事件
+    closeSettingsBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+            console.log('关闭设置面板');
+            if (translateSettingsPanel) {
+                translateSettingsPanel.style.display = 'none';
+            }
+            if (polishSettingsPanel) {
+                polishSettingsPanel.style.display = 'none';
+            }
+        });
+    });
+    
+    // 添加键盘快捷键支持
+    if (chatInput) {
+        chatInput.addEventListener('keydown', (e) => {
+            // Ctrl+Enter 或 Cmd+Enter 快速翻译
+            if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+                e.preventDefault();
+                if (translateBtn) {
+                    translateBtn.click();
+                }
+            }
+            // Shift+Enter 快速润色
+            else if (e.shiftKey && e.key === 'Enter') {
+                e.preventDefault();
+                if (polishBtn) {
+                    polishBtn.click();
+                }
+            }
+        });
     }
 });
 
@@ -1350,3 +2222,426 @@ function callApi(url, data) {
         return response.json();
     });
 }
+
+// 保存模型选择到localStorage
+function saveModelSelections() {
+    const translateService = document.querySelector('input[name="translate-service"]:checked');
+    const polishService = document.querySelector('input[name="polish-service"]:checked');
+    const polishStyleSelect = document.getElementById('polishStyle');
+    
+    const selections = {
+        translateService: translateService ? translateService.value : 'gpt',
+        polishService: polishService ? polishService.value : 'gpt',
+        polishStyle: polishStyleSelect ? polishStyleSelect.value : 'professional'
+    };
+    
+    localStorage.setItem('tranoptim-model-selections', JSON.stringify(selections));
+    console.log('模型选择已保存:', selections);
+}
+
+// 加载模型选择
+function loadModelSelections() {
+    const saved = localStorage.getItem('tranoptim-model-selections');
+    if (saved) {
+        try {
+            const selections = JSON.parse(saved);
+            console.log('加载模型选择:', selections);
+            
+            // 恢复翻译服务选择
+            const translateRadio = document.querySelector(`input[name="translate-service"][value="${selections.translateService}"]`);
+            if (translateRadio) {
+                translateRadio.checked = true;
+            }
+            
+            // 恢复润色服务选择
+            const polishRadio = document.querySelector(`input[name="polish-service"][value="${selections.polishService}"]`);
+            if (polishRadio) {
+                polishRadio.checked = true;
+            }
+            
+            // 恢复润色风格选择
+            const polishStyleSelect = document.getElementById('polishStyle');
+            if (polishStyleSelect && selections.polishStyle) {
+                polishStyleSelect.value = selections.polishStyle;
+            }
+        } catch (e) {
+            console.error('加载模型选择失败:', e);
+        }
+    }
+}
+
+// 聊天界面相关函数
+
+function addUserMessage(content, image = null, saveToHistory = true) {
+    if (!chatMessages) return;
+    
+    const messageElement = document.createElement('div');
+    messageElement.className = 'message user';
+    messageElement.id = `message-${messageCounter++}`;
+    
+    const contentElement = document.createElement('div');
+    contentElement.className = 'message-content';
+    
+    // 处理图片消息
+    if (image) {
+        const imageContainer = document.createElement('div');
+        imageContainer.className = 'user-image-container';
+        
+        const imageElement = document.createElement('img');
+        imageElement.className = 'user-image';
+        imageElement.src = URL.createObjectURL(image);
+        imageElement.alt = '用户上传的图片';
+        
+        imageContainer.appendChild(imageElement);
+        contentElement.appendChild(imageContainer);
+        
+        if (content && content.trim() && !content.includes('[图片')) {
+            const textElement = document.createElement('p');
+            textElement.className = 'user-text image-caption';
+            textElement.textContent = content;
+            contentElement.appendChild(textElement);
+        }
+    } else {
+        // 清理内容中的图片标识
+        let cleanContent = content || '';
+        cleanContent = cleanContent.replace(/\s*\[图片已粘贴\]\s*/g, '').trim();
+        cleanContent = cleanContent.replace(/\s*\[图片已拖拽\]\s*/g, '').trim();
+        
+        const textElement = document.createElement('p');
+        textElement.textContent = cleanContent || '[文本翻译请求]';
+        contentElement.appendChild(textElement);
+    }
+    
+    messageElement.appendChild(contentElement);
+    chatMessages.appendChild(messageElement);
+    
+    if (saveToHistory) {
+        // 保存时也清理内容
+        let cleanContent = content || '';
+        cleanContent = cleanContent.replace(/\s*\[图片已粘贴\]\s*/g, '').trim();
+        cleanContent = cleanContent.replace(/\s*\[图片已拖拽\]\s*/g, '').trim();
+        
+        saveMessageToCurrentConversation({
+            type: 'user',
+            content: cleanContent || (image ? '[图片]' : '[文本]'),
+            hasImage: !!image,
+            time: new Date().toISOString()
+        });
+    }
+    
+    scrollToBottom();
+}
+
+// 清除图片状态的辅助函数
+function clearImageState() {
+    console.log('清除图片状态，当前图片文件:', !!currentImageFile);
+    currentImageFile = null;
+    
+    if (uploadImageBtn) {
+        uploadImageBtn.innerHTML = '<i class="fas fa-image"></i> 图片';
+        uploadImageBtn.style.backgroundColor = '';
+    }
+    
+    if (chatInput) {
+        // 清理输入框中的图片标识
+        let cleanText = chatInput.value.replace(/\s*\[图片已粘贴\]\s*/g, '').trim();
+        cleanText = cleanText.replace(/\s*\[图片已拖拽\]\s*/g, '').trim();
+        chatInput.value = cleanText;
+        chatInput.classList.remove('has-image');
+        setTimeout(autoResizeInput, 0);
+    }
+}
+
+function addAITranslationMessage(result, saveToHistory = true) {
+    if (!chatMessages || !result) return;
+    
+    const messageId = 'msg-' + (++messageCounter);
+    const messageDiv = document.createElement('div');
+    messageDiv.className = 'message ai';
+    messageDiv.id = messageId;
+    
+    const contentDiv = document.createElement('div');
+    contentDiv.className = 'message-content';
+    
+    // 服务信息
+    const serviceInfo = document.createElement('div');
+    serviceInfo.className = 'service-info';
+    serviceInfo.innerHTML = `<span>🤖 由 ${result.service || 'AI'} 提供的翻译</span>`;
+    contentDiv.appendChild(serviceInfo);
+    
+    // 判断是否为图片翻译 - 修复判断逻辑
+    // 通过检查当前对话的最后一条用户消息是否包含图片来判断
+    let isImageTranslation = false;
+    if (currentConversationId && conversations.length > 0) {
+        const currentConv = conversations.find(conv => conv.id === currentConversationId);
+        if (currentConv && currentConv.messages.length > 0) {
+            // 找到最后一条用户消息
+            const lastUserMessage = currentConv.messages
+                .slice()
+                .reverse()
+                .find(msg => msg.type === 'user');
+            
+            // 如果最后一条用户消息有图片，则当前翻译结果是图片翻译
+            isImageTranslation = !!(lastUserMessage && lastUserMessage.hasImage);
+        }
+    }
+    
+    if (isImageTranslation) {
+        // 图片翻译：显示OCR识别结果
+        const ocrDiv = document.createElement('div');
+        ocrDiv.className = 'ocr-result-section';
+        ocrDiv.innerHTML = `
+            <div class="section-header">
+                <div class="section-title"><i class="fas fa-search"></i> OCR识别结果</div>
+                <div class="section-actions">
+                    <button class="section-btn copy-ocr-btn" title="复制识别文本">
+                        <i class="fas fa-copy"></i> 复制识别文本
+                    </button>
+                </div>
+            </div>
+            <div class="section-content ocr-text">${escapeHtml(result.originalText)}</div>
+        `;
+        contentDiv.appendChild(ocrDiv);
+    }
+    
+    // 翻译结果
+    const translationDiv = document.createElement('div');
+    translationDiv.className = 'translation-result-section';
+    translationDiv.innerHTML = `
+        <div class="section-header">
+            <div class="section-title"><i class="fas fa-language"></i> ${isImageTranslation ? '图片文字翻译' : '文本翻译'}</div>
+            <div class="section-actions">
+                <button class="section-btn copy-translation-btn" title="复制翻译结果">
+                    <i class="fas fa-clipboard"></i> 复制翻译
+                </button>
+            </div>
+        </div>
+        <div class="section-content translated-text">${escapeHtml(result.translatedText)}</div>
+    `;
+    contentDiv.appendChild(translationDiv);
+    
+    // 主要操作按钮
+    const actionButtons = document.createElement('div');
+    actionButtons.className = 'message-actions';
+    
+    // 根据是否为图片翻译显示不同的按钮
+    if (isImageTranslation) {
+        const copyOnlyTranslationBtn = document.createElement('button');
+        copyOnlyTranslationBtn.className = 'action-btn copy-btn primary';
+        copyOnlyTranslationBtn.innerHTML = '<i class="fas fa-clipboard"></i> 复制翻译结果';
+        copyOnlyTranslationBtn.addEventListener('click', function() {
+            copyTextToClipboard(result.translatedText);
+            showNotification('已复制翻译结果（不含OCR文本）', this);
+        });
+        
+        const copyAllBtn = document.createElement('button');
+        copyAllBtn.className = 'action-btn copy-all-btn';
+        copyAllBtn.innerHTML = '<i class="fas fa-copy"></i> 复制全部';
+        copyAllBtn.addEventListener('click', function() {
+            const fullText = `OCR识别:\n${result.originalText}\n\n翻译结果:\n${result.translatedText}`;
+            copyTextToClipboard(fullText);
+            showNotification('已复制OCR识别和翻译结果', this);
+        });
+        
+        actionButtons.appendChild(copyOnlyTranslationBtn);
+        actionButtons.appendChild(copyAllBtn);
+    } else {
+        const copyButton = document.createElement('button');
+        copyButton.className = 'action-btn copy-btn primary';
+        copyButton.innerHTML = '<i class="fas fa-clipboard"></i> 复制结果';
+        copyButton.addEventListener('click', function() {
+            copyTextToClipboard(result.translatedText);
+            showNotification('已复制翻译结果', this);
+        });
+        
+        actionButtons.appendChild(copyButton);
+    }
+    
+    const copyToInputButton = document.createElement('button');
+    copyToInputButton.className = 'action-btn copy-to-input-btn';
+    copyToInputButton.innerHTML = '<i class="fas fa-arrow-right"></i> 复制到对话框';
+    copyToInputButton.addEventListener('click', function() {
+        if (chatInput) {
+            chatInput.value = result.translatedText;
+            chatInput.focus();
+            setTimeout(autoResizeInput, 0);
+        }
+        showNotification('已复制翻译结果到对话框', this);
+    });
+    
+    actionButtons.appendChild(copyToInputButton);
+    contentDiv.appendChild(actionButtons);
+    
+    messageDiv.appendChild(contentDiv);
+    chatMessages.appendChild(messageDiv);
+    
+    // 添加内部按钮事件监听
+    const copyOcrBtn = messageDiv.querySelector('.copy-ocr-btn');
+    const copyTranslationBtn = messageDiv.querySelector('.copy-translation-btn');
+    
+    if (copyOcrBtn) {
+        copyOcrBtn.addEventListener('click', function() {
+            copyTextToClipboard(result.originalText);
+            showNotification('已复制OCR识别文本', this);
+        });
+    }
+    
+    if (copyTranslationBtn) {
+        copyTranslationBtn.addEventListener('click', function() {
+            copyTextToClipboard(result.translatedText);
+            showNotification('已复制翻译结果', this);
+        });
+    }
+    
+    if (saveToHistory) {
+        saveMessageToCurrentConversation({
+            type: 'ai',
+            translationResult: result,
+            time: new Date().toISOString()
+        });
+    }
+    
+    scrollToBottom();
+}
+
+function addAIPolishMessage(result, saveToHistory = true) {
+    if (!chatMessages || !result) return;
+    
+    const messageId = 'msg-' + (++messageCounter);
+    const messageDiv = document.createElement('div');
+    messageDiv.className = 'message ai';
+    messageDiv.id = messageId;
+    
+    const contentDiv = document.createElement('div');
+    contentDiv.className = 'message-content';
+    
+    let messageContent = '';
+    
+    if (result.normalStyle || result.rephraseStyle) {
+        // 双风格润色结果
+        messageContent = `
+            <div class="polishing-result">
+                <div class="service-info">
+                    <span>🧠 由 ${result.service || 'AI'} 提供的润色</span>
+                </div>
+                <div class="polish-results">
+                    <div class="result-group">
+                        <div class="content-header">常规优化</div>
+                        <div class="content-body">${escapeHtml(result.normalStyle || '润色失败')}</div>
+                    </div>
+                    <div class="result-group">
+                        <div class="content-header">转换语言风格</div>
+                        <div class="content-body">${escapeHtml(result.rephraseStyle || '润色失败')}</div>
+                    </div>
+                </div>
+                <div class="message-actions">
+                    <button class="message-action-btn copy-btn-normal">
+                        <i class="fas fa-clipboard"></i> 复制常规风格
+                    </button>
+                    <button class="message-action-btn copy-btn-rephrase">
+                        <i class="fas fa-clipboard"></i> 复制转换风格
+                    </button>
+                    <button class="message-action-btn copy-to-input-btn">
+                        <i class="fas fa-arrow-right"></i> 复制到对话框
+                    </button>
+                </div>
+            </div>
+        `;
+    } else {
+        // 单风格润色结果
+        messageContent = `
+            <div class="polishing-result">
+                <div class="service-info">
+                    <span>🧠 由 ${result.service || 'AI'} 提供的润色</span>
+                </div>
+                <div class="polish-results">
+                    <div class="result-group">
+                        <div class="content-header">润色结果</div>
+                        <div class="content-body">${escapeHtml(result.translatedText || '润色失败')}</div>
+                    </div>
+                </div>
+                <div class="message-actions">
+                    <button class="message-action-btn copy-btn">
+                        <i class="fas fa-clipboard"></i> 复制结果
+                    </button>
+                    <button class="message-action-btn copy-to-input-btn">
+                        <i class="fas fa-arrow-right"></i> 复制到对话框
+                    </button>
+                </div>
+            </div>
+        `;
+    }
+    
+    contentDiv.innerHTML = messageContent;
+    messageDiv.appendChild(contentDiv);
+    chatMessages.appendChild(messageDiv);
+    
+    // 添加事件监听
+    const copyNormalBtn = messageDiv.querySelector('.copy-btn-normal');
+    const copyRephraseBtn = messageDiv.querySelector('.copy-btn-rephrase');
+    const copyBtn = messageDiv.querySelector('.copy-btn');
+    const copyToInputBtn = messageDiv.querySelector('.copy-to-input-btn');
+    
+    if (copyNormalBtn) {
+        copyNormalBtn.addEventListener('click', function() {
+            copyTextToClipboard(result.normalStyle);
+            showNotification('已复制常规风格', this);
+        });
+    }
+    
+    if (copyRephraseBtn) {
+        copyRephraseBtn.addEventListener('click', function() {
+            copyTextToClipboard(result.rephraseStyle);
+            showNotification('已复制转换风格', this);
+        });
+    }
+    
+    if (copyBtn) {
+        copyBtn.addEventListener('click', function() {
+            copyTextToClipboard(result.translatedText);
+            showNotification('已复制润色结果', this);
+        });
+    }
+    
+    if (copyToInputBtn) {
+        copyToInputBtn.addEventListener('click', function() {
+            const textToCopy = result.normalStyle || result.translatedText;
+            if (chatInput) {
+                chatInput.value = textToCopy;
+                chatInput.focus();
+                setTimeout(autoResizeInput, 0);
+            }
+            showNotification('已复制到对话框', this);
+        });
+    }
+    
+    if (saveToHistory) {
+        saveMessageToCurrentConversation({
+            type: 'ai',
+            polishResult: result,
+            time: new Date().toISOString()
+        });
+    }
+    
+    scrollToBottom();
+}
+
+// 在页面加载完成后执行初始化
+console.log('所有函数已定义，正在初始化...');
+
+// 初始化模型选择记忆
+loadModelSelections();
+
+// 监听模型选择变化，自动保存
+document.addEventListener('change', function(e) {
+    if (e.target.name === 'translate-service' || 
+        e.target.name === 'polish-service' || 
+        e.target.id === 'polishStyle') {
+        saveModelSelections();
+    }
+});
+
+// 延迟调用一次以初始化输入框高度
+setTimeout(autoResizeInput, 100);
+
+console.log('TranOptim 聊天界面初始化完成!');
