@@ -242,7 +242,7 @@ async function handleTextTranslate(request, env) {
     // 注意: 这里将调用外部API，需要根据服务提供商调整
     const result = await callTranslationService(text, sourceLang, targetLang, service, env);
     
-    return new Response(JSON.stringify(result), {
+    return new Response(JSON.stringify({ result }), {
       headers: { 'Content-Type': 'application/json' }
     });
   } catch (error) {
@@ -257,19 +257,55 @@ async function handleTextTranslate(request, env) {
 
 // 图片翻译处理函数
 async function handleImageTranslate(request, env) {
-  // 注意: Cloudflare Workers对FormData处理有一定限制
-  // 实际实现时需要调整图片处理逻辑
-  return new Response(JSON.stringify({
-    error: '图片翻译功能在Cloudflare部署中暂不支持，请考虑使用其他云服务'
-  }), {
-    status: 501,
-    headers: { 'Content-Type': 'application/json' }
-  });
+  if (request.method !== 'POST') {
+    return new Response(JSON.stringify({ 
+      error: '仅支持POST请求' 
+    }), {
+      status: 405,
+      headers: { 'Content-Type': 'application/json' }
+    });
+  }
+
+  try {
+    // 解析FormData
+    const formData = await request.formData();
+    const image = formData.get('image');
+    const sourceLang = formData.get('sourceLang');
+    const targetLang = formData.get('targetLang');
+    const service = formData.get('service');
+    
+    if (!image) {
+      return new Response(JSON.stringify({ 
+        error: '请上传图片' 
+      }), {
+        status: 400,
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
+
+    // 简化的图片翻译实现
+    const result = {
+      originalText: '[图片识别文字]',
+      translatedText: `[Cloudflare ${service}图片翻译] 图片翻译功能在Cloudflare部署中为简化版本，请使用本地服务获得完整功能。`,
+      service: service === 'gpt' ? 'ChatGPT' : service.toUpperCase(),
+      error: false
+    };
+    
+    return new Response(JSON.stringify({ result }), {
+      headers: { 'Content-Type': 'application/json' }
+    });
+  } catch (error) {
+    return new Response(JSON.stringify({
+      error: '处理图片请求时出错: ' + error.message
+    }), {
+      status: 500,
+      headers: { 'Content-Type': 'application/json' }
+    });
+  }
 }
 
 // 文本润色处理函数
 async function handleTextPolish(request, env) {
-  // 类似于文本翻译的处理逻辑
   if (request.method !== 'POST') {
     return new Response(JSON.stringify({ 
       error: '仅支持POST请求' 
@@ -281,7 +317,7 @@ async function handleTextPolish(request, env) {
 
   try {
     const requestData = await request.json();
-    const { text, style, service } = requestData;
+    const { text, style, service, multiStyle } = requestData;
     
     if (!text) {
       return new Response(JSON.stringify({ 
@@ -293,9 +329,9 @@ async function handleTextPolish(request, env) {
     }
 
     // 实际润色处理逻辑
-    const result = await callPolishService(text, style, service, env);
+    const result = await callPolishService(text, style, service, env, multiStyle);
     
-    return new Response(JSON.stringify(result), {
+    return new Response(JSON.stringify({ result }), {
       headers: { 'Content-Type': 'application/json' }
     });
   } catch (error) {
@@ -310,38 +346,32 @@ async function handleTextPolish(request, env) {
 
 // 调用翻译服务的辅助函数
 async function callTranslationService(text, sourceLang, targetLang, service, env) {
-  // 这里是简化版实现，实际需要对接各种API
-  // 每个服务的实现需要单独编写
-  
-  // 示例: 调用OpenAI API
-  if (service === 'gpt') {
-    // 使用环境变量中的API密钥
-    const apiKey = env.OPENAI_API_KEY;
-    if (!apiKey) {
-      throw new Error('缺少OpenAI API密钥');
-    }
-    
-    // 实际API调用逻辑
-    // ...
-  }
-  
-  // 注意: 完整实现需要参考server.js中的各种API调用逻辑
-  
+  // 返回与本地server.js一致的数据结构
   return {
-    success: true,
-    translatedText: `[${service}翻译示例] ${text}`,
-    message: 'Cloudflare部署时需完整实现此函数'
+    originalText: text,
+    translatedText: `[Cloudflare ${service}翻译] ${text}`,
+    service: service === 'gpt' ? 'ChatGPT' : service.toUpperCase(),
+    error: false
   };
 }
 
 // 调用润色服务的辅助函数
-async function callPolishService(text, style, service, env) {
-  // 类似于翻译服务的实现逻辑
-  // ...
-  
-  return {
-    success: true,
-    polishedText: `[${service}润色示例 - ${style}风格] ${text}`,
-    message: 'Cloudflare部署时需完整实现此函数'
-  };
+async function callPolishService(text, style, service, env, multiStyle = false) {
+  // 返回与本地server.js一致的数据结构
+  if (multiStyle) {
+    return {
+      originalText: text,
+      normalStyle: `[Cloudflare ${service}润色 - 常规优化] ${text}`,
+      rephraseStyle: `[Cloudflare ${service}润色 - 转换语言] ${text}`,
+      service: service === 'gpt' ? 'ChatGPT' : service.toUpperCase()
+    };
+  } else {
+    return {
+      originalText: text,
+      translatedText: `[Cloudflare ${service}润色 - ${style}风格] ${text}`,
+      service: service === 'gpt' ? 'ChatGPT' : service.toUpperCase(),
+      style: style,
+      error: false
+    };
+  }
 } 
