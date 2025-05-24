@@ -12,8 +12,8 @@ const AuthConfig = {
   
   // 认证相关设置
   settings: {
-    // 是否启用认证功能
-    enabled: true
+    // 是否启用认证功能 - 默认禁用以保持兼容性
+    enabled: false
   }
 };
 

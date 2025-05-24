@@ -1009,8 +1009,16 @@ document.addEventListener('DOMContentLoaded', function() {
                     formData.append('targetLang', toLang);
                     formData.append('service', selectedService.value);
                     
+                    // 为图片请求添加认证头
+                    const headers = {};
+                    const token = getAuthToken();
+                    if (token) {
+                        headers['Authorization'] = `Bearer ${token}`;
+                    }
+                    
                     const response = await fetch('/api/translate/image', {
                         method: 'POST',
+                        headers: headers,
                         body: formData
                     });
                     
@@ -1032,9 +1040,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     
                     const response = await fetch('/api/translate/text', {
                         method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json'
-                        },
+                        headers: getRequestHeaders(),
                         body: JSON.stringify(requestBody)
                     });
                     
@@ -1125,9 +1131,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 
                 const response = await fetch('/api/polish/text', {
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
+                    headers: getRequestHeaders(),
                     body: JSON.stringify(requestBody)
                 });
                 
