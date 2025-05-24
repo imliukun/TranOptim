@@ -390,7 +390,7 @@ async function callOpenAITranslation(text, sourceLang, targetLang, env) {
       'Content-Type': 'application/json'
     },
     body: JSON.stringify({
-      model: 'gpt-3.5-turbo',
+      model: 'gpt-4o',
       messages: [{
         role: 'user',
         content: prompt
@@ -581,7 +581,7 @@ async function callOpenAIPolish(text, style, env) {
       'Content-Type': 'application/json'
     },
     body: JSON.stringify({
-      model: 'gpt-3.5-turbo',
+      model: 'gpt-4o',
       messages: [{
         role: 'user',
         content: prompt
