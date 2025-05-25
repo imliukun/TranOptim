@@ -12,8 +12,8 @@ const AuthConfig = {
   
   // 认证相关设置
   settings: {
-    // 是否启用认证功能
-    enabled: true
+    // 是否启用认证功能 - 默认禁用以保持兼容性
+    enabled: false
   }
 };
 
@@ -242,7 +242,7 @@ async function handleTextTranslate(request, env) {
     // 注意: 这里将调用外部API，需要根据服务提供商调整
     const result = await callTranslationService(text, sourceLang, targetLang, service, env);
     
-    return new Response(JSON.stringify(result), {
+    return new Response(JSON.stringify({ result }), {
       headers: { 'Content-Type': 'application/json' }
     });
   } catch (error) {
@@ -257,19 +257,55 @@ async function handleTextTranslate(request, env) {
 
 // 图片翻译处理函数
 async function handleImageTranslate(request, env) {
-  // 注意: Cloudflare Workers对FormData处理有一定限制
-  // 实际实现时需要调整图片处理逻辑
+  if (request.method !== 'POST') {
+    return new Response(JSON.stringify({ 
+      error: '仅支持POST请求' 
+    }), {
+      status: 405,
+      headers: { 'Content-Type': 'application/json' }
+    });
+  }
+
+  try {
+    // 解析FormData
+    const formData = await request.formData();
+    const image = formData.get('image');
+    const sourceLang = formData.get('sourceLang');
+    const targetLang = formData.get('targetLang');
+    const service = formData.get('service');
+    
+    if (!image) {
   return new Response(JSON.stringify({
-    error: '图片翻译功能在Cloudflare部署中暂不支持，请考虑使用其他云服务'
+        error: '请上传图片' 
   }), {
-    status: 501,
+        status: 400,
     headers: { 'Content-Type': 'application/json' }
   });
+    }
+
+    // 简化的图片翻译实现
+    const result = {
+      originalText: '[图片识别文字]',
+      translatedText: `[Cloudflare ${service}图片翻译] 图片翻译功能在Cloudflare部署中为简化版本，请使用本地服务获得完整功能。`,
+      service: service === 'gpt' ? 'ChatGPT' : service.toUpperCase(),
+      error: false
+    };
+    
+    return new Response(JSON.stringify({ result }), {
+      headers: { 'Content-Type': 'application/json' }
+    });
+  } catch (error) {
+    return new Response(JSON.stringify({
+      error: '处理图片请求时出错: ' + error.message
+    }), {
+      status: 500,
+      headers: { 'Content-Type': 'application/json' }
+    });
+  }
 }
 
 // 文本润色处理函数
 async function handleTextPolish(request, env) {
-  // 类似于文本翻译的处理逻辑
   if (request.method !== 'POST') {
     return new Response(JSON.stringify({ 
       error: '仅支持POST请求' 
@@ -281,7 +317,7 @@ async function handleTextPolish(request, env) {
 
   try {
     const requestData = await request.json();
-    const { text, style, service } = requestData;
+    const { text, style, service, multiStyle } = requestData;
     
     if (!text) {
       return new Response(JSON.stringify({ 
@@ -293,9 +329,9 @@ async function handleTextPolish(request, env) {
     }
 
     // 实际润色处理逻辑
-    const result = await callPolishService(text, style, service, env);
+    const result = await callPolishService(text, style, service, env, multiStyle);
     
-    return new Response(JSON.stringify(result), {
+    return new Response(JSON.stringify({ result }), {
       headers: { 'Content-Type': 'application/json' }
     });
   } catch (error) {
@@ -310,38 +346,937 @@ async function handleTextPolish(request, env) {
 
 // 调用翻译服务的辅助函数
 async function callTranslationService(text, sourceLang, targetLang, service, env) {
-  // 这里是简化版实现，实际需要对接各种API
-  // 每个服务的实现需要单独编写
-  
-  // 示例: 调用OpenAI API
-  if (service === 'gpt') {
-    // 使用环境变量中的API密钥
-    const apiKey = env.OPENAI_API_KEY;
-    if (!apiKey) {
-      throw new Error('缺少OpenAI API密钥');
+  try {
+    if (service === 'gpt') {
+      return await callOpenAITranslation(text, sourceLang, targetLang, env);
+    } else if (service === 'deepseek') {
+      return await callDeepSeekTranslation(text, sourceLang, targetLang, env);
+    } else if (service === 'qwen') {
+      return await callQwenTranslation(text, sourceLang, targetLang, env);
+    } else if (service === 'gemini') {
+      return await callGeminiTranslation(text, sourceLang, targetLang, env);
+    } else if (service === 'doubao') {
+      return await callDoubaoTranslation(text, sourceLang, targetLang, env);
+    } else {
+      throw new Error(`不支持的翻译服务: ${service}`);
+    }
+  } catch (error) {
+    console.error(`${service}翻译失败:`, error);
+    console.error(`错误详情 - 服务: ${service}, 状态: ${error.status || 'unknown'}, 消息: ${error.message}`);
+    
+    // 根据错误类型提供更详细的错误信息
+    let errorMessage = error.message;
+    if (error.message.includes('403')) {
+      errorMessage = `${service} API密钥无效或没有权限访问所请求的模型`;
+    } else if (error.message.includes('400')) {
+      errorMessage = `${service} API请求格式错误，请检查配置`;
+    } else if (error.message.includes('404')) {
+      errorMessage = `${service} API端点不存在或模型不可用`;
+    } else if (error.message.includes('429')) {
+      errorMessage = `${service} API请求频率超限，请稍后重试`;
+    } else if (error.message.includes('500')) {
+      errorMessage = `${service} 服务器内部错误，请稍后重试`;
     }
     
-    // 实际API调用逻辑
-    // ...
+    return {
+      originalText: text,
+      translatedText: `翻译失败: ${errorMessage}`,
+      service: service === 'gpt' ? 'ChatGPT' : service.toUpperCase(),
+      error: true
+    };
+  }
+}
+
+// OpenAI翻译实现
+async function callOpenAITranslation(text, sourceLang, targetLang, env) {
+  const apiKey = env.OPENAI_API_KEY;
+  if (!apiKey) {
+    throw new Error('请配置 OPENAI_API_KEY 环境变量');
+  }
+
+  const fromLangName = getLanguageName(sourceLang);
+  const toLangName = getLanguageName(targetLang);
+  
+  const prompt = sourceLang === 'auto' 
+    ? `请将以下文本翻译成${toLangName}，请直接输出翻译结果，不要包含任何解释或额外内容：\n\n${text}`
+    : `请将以下${fromLangName}文本翻译成${toLangName}，请直接输出翻译结果，不要包含任何解释或额外内容：\n\n${text}`;
+
+  // 智能网络路由：尝试多个端点和模型
+  const endpoints = [
+    {
+      url: 'https://api.openai.com/v1/chat/completions',
+      models: ['gpt-4o', 'gpt-3.5-turbo'],
+      name: 'OpenAI Official',
+      timeout: 10000
+    },
+    {
+      url: 'https://api.chatanywhere.tech/v1/chat/completions',
+      models: ['gpt-4o', 'gpt-3.5-turbo'],
+      name: 'ChatAnywhere',
+      timeout: 15000
+    },
+    {
+      url: 'https://api.openai-proxy.com/v1/chat/completions',
+      models: ['gpt-3.5-turbo'],
+      name: 'OpenAI Proxy 1',
+      timeout: 20000
+    }
+  ];
+  
+  let lastError;
+  
+  for (const endpoint of endpoints) {
+    for (const model of endpoint.models) {
+      try {
+        console.log(`尝试 ${endpoint.name} - ${model}`);
+        
+        const response = await fetch(endpoint.url, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${apiKey}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            model: model,
+            messages: [{
+              role: 'user',
+              content: prompt
+            }],
+            max_tokens: 2048,
+            temperature: 0.3
+          }),
+          signal: AbortSignal.timeout(endpoint.timeout)
+        });
+
+        if (!response.ok) {
+          const errorData = await response.text();
+          console.log(`${endpoint.name} - ${model} 失败: ${response.status} ${response.statusText}`);
+          throw new Error(`OpenAI API错误: ${response.status} ${response.statusText} - ${errorData}`);
+        }
+
+        const data = await response.json();
+        const translatedText = data.choices[0]?.message?.content?.trim();
+        
+        if (!translatedText) {
+          throw new Error('OpenAI返回空结果');
+        }
+
+        console.log(`${endpoint.name} - ${model} 成功`);
+        return {
+          originalText: text,
+          translatedText: translatedText,
+          service: 'ChatGPT',
+          error: false
+        };
+      } catch (error) {
+        lastError = error;
+        console.log(`${endpoint.name} - ${model} 失败:`, error.message);
+        continue;
+      }
+    }
   }
   
-  // 注意: 完整实现需要参考server.js中的各种API调用逻辑
+  // 如果所有端点都失败，抛出最后一个错误
+  throw lastError;
+}
+
+// DeepSeek翻译实现
+async function callDeepSeekTranslation(text, sourceLang, targetLang, env) {
+  const apiKey = env.DEEPSEEK_API_KEY;
+  if (!apiKey) {
+    throw new Error('请配置 DEEPSEEK_API_KEY 环境变量');
+  }
+
+  const fromLangName = getLanguageName(sourceLang);
+  const toLangName = getLanguageName(targetLang);
+  
+  const prompt = sourceLang === 'auto' 
+    ? `请将以下文本翻译成${toLangName}，请直接输出翻译结果，不要包含任何解释或额外内容：\n\n${text}`
+    : `请将以下${fromLangName}文本翻译成${toLangName}，请直接输出翻译结果，不要包含任何解释或额外内容：\n\n${text}`;
+
+  const response = await fetch('https://api.siliconflow.cn/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${apiKey}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      model: 'deepseek-ai/DeepSeek-V3',
+      messages: [{
+        role: 'user',
+        content: prompt
+      }],
+      max_tokens: 2048,
+      temperature: 0.3
+    })
+  });
+
+  if (!response.ok) {
+    throw new Error(`DeepSeek API错误: ${response.status} ${response.statusText}`);
+  }
+
+  const data = await response.json();
+  const translatedText = data.choices[0]?.message?.content?.trim();
+  
+  if (!translatedText) {
+    throw new Error('DeepSeek返回空结果');
+  }
+
+  return {
+    originalText: text,
+    translatedText: translatedText,
+    service: 'DeepSeek',
+    error: false
+  };
+}
+
+// 获取语言名称的辅助函数
+function getLanguageName(langCode) {
+  const langMap = {
+    'zh': '中文',
+    'en': '英文',
+    'ja': '日文',
+    'ko': '韩文',
+    'fr': '法文',
+    'de': '德文',
+    'es': '西班牙文',
+    'pt': '葡萄牙文',
+    'ru': '俄文',
+    'it': '意大利文',
+    'auto': '自动检测'
+  };
+  return langMap[langCode] || langCode;
+}
+
+// Qwen翻译实现
+async function callQwenTranslation(text, sourceLang, targetLang, env) {
+  const apiKey = env.QWEN_API_KEY;
+  if (!apiKey) {
+    throw new Error('请配置 QWEN_API_KEY 环境变量');
+  }
+
+  const fromLangName = getLanguageName(sourceLang);
+  const toLangName = getLanguageName(targetLang);
+  
+  const prompt = sourceLang === 'auto' 
+    ? `请将以下文本翻译成${toLangName}，请直接输出翻译结果，不要包含任何解释或额外内容：\n\n${text}`
+    : `请将以下${fromLangName}文本翻译成${toLangName}，请直接输出翻译结果，不要包含任何解释或额外内容：\n\n${text}`;
+
+  const response = await fetch('https://api.siliconflow.cn/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${apiKey}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      model: 'Qwen/Qwen2.5-72B-Instruct',
+      messages: [{
+        role: 'user',
+        content: prompt
+      }],
+      max_tokens: 2048,
+      temperature: 0.3
+    })
+  });
+
+  if (!response.ok) {
+    throw new Error(`Qwen API错误: ${response.status} ${response.statusText}`);
+  }
+
+  const data = await response.json();
+  const translatedText = data.choices[0]?.message?.content?.trim();
+  
+  if (!translatedText) {
+    throw new Error('Qwen返回空结果');
+  }
+
+  return {
+    originalText: text,
+    translatedText: translatedText,
+    service: 'Qwen',
+    error: false
+  };
+}
+
+// Gemini翻译实现
+async function callGeminiTranslation(text, sourceLang, targetLang, env) {
+  const apiKey = env.GEMINI_API_KEY;
+  if (!apiKey) {
+    throw new Error('请配置 GEMINI_API_KEY 环境变量');
+  }
+
+  const fromLangName = getLanguageName(sourceLang);
+  const toLangName = getLanguageName(targetLang);
+  
+  const prompt = sourceLang === 'auto' 
+    ? `请将以下文本翻译成${toLangName}，请直接输出翻译结果，不要包含任何解释或额外内容：\n\n${text}`
+    : `请将以下${fromLangName}文本翻译成${toLangName}，请直接输出翻译结果，不要包含任何解释或额外内容：\n\n${text}`;
+
+  // 智能网络路由：尝试多个模型和配置
+  const endpoints = [
+    {
+      url: `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
+      model: 'gemini-2.0-flash',
+      name: 'Gemini 2.0 Flash',
+      timeout: 15000,
+      temperature: 0.3
+    },
+    {
+      url: `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`,
+      model: 'gemini-1.5-flash',
+      name: 'Gemini 1.5 Flash',
+      timeout: 18000,
+      temperature: 0.3
+    },
+    {
+      url: `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:generateContent?key=${apiKey}`,
+      model: 'gemini-1.5-pro',
+      name: 'Gemini 1.5 Pro',
+      timeout: 25000,
+      temperature: 0.2
+    },
+    {
+      url: `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.0-pro:generateContent?key=${apiKey}`,
+      model: 'gemini-1.0-pro',
+      name: 'Gemini 1.0 Pro',
+      timeout: 20000,
+      temperature: 0.3
+    }
+  ];
+  
+  let lastError;
+  
+  for (const endpoint of endpoints) {
+    try {
+      console.log(`尝试 ${endpoint.name}`);
+      
+      const response = await fetch(endpoint.url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          contents: [{
+            parts: [{
+              text: prompt
+            }]
+          }],
+          generationConfig: {
+            temperature: endpoint.temperature,
+            maxOutputTokens: 2048,
+            topK: 40,
+            topP: 0.95
+          },
+          safetySettings: [
+            {
+              category: "HARM_CATEGORY_HARASSMENT",
+              threshold: "BLOCK_MEDIUM_AND_ABOVE"
+            },
+            {
+              category: "HARM_CATEGORY_HATE_SPEECH",
+              threshold: "BLOCK_MEDIUM_AND_ABOVE"
+            },
+            {
+              category: "HARM_CATEGORY_SEXUALLY_EXPLICIT",
+              threshold: "BLOCK_MEDIUM_AND_ABOVE"
+            },
+            {
+              category: "HARM_CATEGORY_DANGEROUS_CONTENT",
+              threshold: "BLOCK_MEDIUM_AND_ABOVE"
+            }
+          ]
+        }),
+        signal: AbortSignal.timeout(endpoint.timeout)
+      });
+
+      if (!response.ok) {
+        const errorData = await response.text();
+        console.log(`${endpoint.name} 失败: ${response.status} ${response.statusText}`);
+        
+        // 特殊处理常见错误
+        if (response.status === 429) {
+          console.log(`${endpoint.name} 请求频率限制，尝试下一个端点`);
+          throw new Error(`Gemini API请求频率超限: ${response.status} ${response.statusText}`);
+        } else if (response.status === 403) {
+          console.log(`${endpoint.name} API密钥问题，尝试下一个端点`);
+          throw new Error(`Gemini API权限错误: ${response.status} ${response.statusText}`);
+        } else if (response.status === 400) {
+          // 400错误可能是模型不支持，尝试下一个
+          console.log(`${endpoint.name} 请求格式或模型不支持，尝试下一个端点`);
+          throw new Error(`Gemini API请求错误: ${response.status} ${response.statusText} - ${errorData}`);
+        }
+        
+        throw new Error(`Gemini API错误: ${response.status} ${response.statusText} - ${errorData}`);
+      }
+
+      const data = await response.json();
+      
+      // 检查响应格式和内容安全性
+      if (!data.candidates || !data.candidates.length) {
+        if (data.promptFeedback && data.promptFeedback.blockReason) {
+          console.log(`${endpoint.name} 内容被安全过滤器拒绝: ${data.promptFeedback.blockReason}`);
+          throw new Error(`Gemini内容被安全过滤器拒绝: ${data.promptFeedback.blockReason}`);
+        }
+        throw new Error('Gemini返回异常响应: 没有候选结果');
+      }
+      
+      const candidate = data.candidates[0];
+      if (!candidate.content || !candidate.content.parts || !candidate.content.parts.length) {
+        throw new Error('Gemini返回异常响应: 候选结果格式错误');
+      }
+      
+      // 检查是否因安全原因被阻止
+      if (candidate.finishReason === 'SAFETY') {
+        console.log(`${endpoint.name} 响应因安全原因被阻止`);
+        throw new Error('Gemini响应因安全原因被阻止');
+      }
+      
+      const translatedText = candidate.content.parts[0].text.trim();
+      
+      if (!translatedText) {
+        throw new Error('Gemini返回空结果');
+      }
+
+      console.log(`${endpoint.name} 成功`);
+      return {
+        originalText: text,
+        translatedText: translatedText,
+        service: 'Gemini',
+        error: false
+      };
+    } catch (error) {
+      lastError = error;
+      console.log(`${endpoint.name} 失败:`, error.message);
+      
+      // 如果是致命错误（如API密钥问题），不再尝试其他端点
+      if (error.message.includes('403') && error.message.includes('API权限错误')) {
+        console.log('检测到API密钥权限问题，停止尝试其他端点');
+        break;
+      }
+      
+      continue;
+    }
+  }
+  
+  // 如果所有端点都失败，抛出最后一个错误
+  throw lastError;
+}
+
+// 豆包翻译实现
+async function callDoubaoTranslation(text, sourceLang, targetLang, env) {
+  const apiKey = env.DOUBAO_API_KEY;
+  if (!apiKey) {
+    throw new Error('请配置 DOUBAO_API_KEY 环境变量');
+  }
+
+  const fromLangName = getLanguageName(sourceLang);
+  const toLangName = getLanguageName(targetLang);
+  
+  const prompt = sourceLang === 'auto' 
+    ? `请将以下文本翻译成${toLangName}，请直接输出翻译结果，不要包含任何解释或额外内容：\n\n${text}`
+    : `请将以下${fromLangName}文本翻译成${toLangName}，请直接输出翻译结果，不要包含任何解释或额外内容：\n\n${text}`;
+
+  const response = await fetch('https://ark.cn-beijing.volces.com/api/v3/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${apiKey}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      model: 'doubao-1-5-pro-32k-250115',
+      messages: [{
+        role: 'user',
+        content: prompt
+      }],
+      max_tokens: 2048,
+      temperature: 0.7
+    })
+  });
+
+  if (!response.ok) {
+    throw new Error(`豆包 API错误: ${response.status} ${response.statusText}`);
+  }
+
+  const data = await response.json();
+  const translatedText = data.choices[0]?.message?.content?.trim();
+  
+  if (!translatedText) {
+    throw new Error('豆包返回空结果');
+  }
   
   return {
-    success: true,
-    translatedText: `[${service}翻译示例] ${text}`,
-    message: 'Cloudflare部署时需完整实现此函数'
+    originalText: text,
+    translatedText: translatedText,
+    service: '豆包',
+    error: false
   };
 }
 
 // 调用润色服务的辅助函数
-async function callPolishService(text, style, service, env) {
-  // 类似于翻译服务的实现逻辑
-  // ...
+async function callPolishService(text, style, service, env, multiStyle = false) {
+  try {
+    if (multiStyle) {
+      // 多风格润色
+      const normalResult = await callPolishAPI(text, 'normal', service, env);
+      const rephraseResult = await callPolishAPI(text, 'rephrase', service, env);
+      
+      return {
+        originalText: text,
+        normalStyle: normalResult.translatedText,
+        rephraseStyle: rephraseResult.translatedText,
+        service: normalResult.service
+      };
+    } else {
+      // 单风格润色
+      return await callPolishAPI(text, style, service, env);
+    }
+  } catch (error) {
+    console.error(`${service}润色失败:`, error);
+    if (multiStyle) {
+      return {
+        originalText: text,
+        normalStyle: `润色失败: ${error.message}`,
+        rephraseStyle: `润色失败: ${error.message}`,
+        service: service === 'gpt' ? 'ChatGPT' : service.toUpperCase()
+      };
+    } else {
+      return {
+        originalText: text,
+        translatedText: `润色失败: ${error.message}`,
+        service: service === 'gpt' ? 'ChatGPT' : service.toUpperCase(),
+        style: style,
+        error: true
+      };
+    }
+  }
+}
+
+// 调用润色API的通用函数
+async function callPolishAPI(text, style, service, env) {
+  if (service === 'gpt') {
+    return await callOpenAIPolish(text, style, env);
+  } else if (service === 'deepseek') {
+    return await callDeepSeekPolish(text, style, env);
+  } else if (service === 'gemini') {
+    return await callGeminiPolish(text, style, env);
+  } else if (service === 'qwen') {
+    return await callQwenPolish(text, style, env);
+  } else if (service === 'doubao') {
+    return await callDoubaoPolish(text, style, env);
+  } else {
+    throw new Error(`不支持的润色服务: ${service}`);
+  }
+}
+
+// OpenAI润色实现
+async function callOpenAIPolish(text, style, env) {
+  const apiKey = env.OPENAI_API_KEY;
+  if (!apiKey) {
+    throw new Error('请配置 OPENAI_API_KEY 环境变量');
+  }
+
+  let prompt;
+  if (style === 'normal') {
+    prompt = `请对以下文本进行常规优化，保持原意的同时提升表达质量和流畅度。请直接输出优化后的文本，不要包含任何解释：\n\n${text}`;
+  } else if (style === 'rephrase') {
+    prompt = `请重新组织以下文本的表达方式，保持核心内容不变但使用不同的语言结构和词汇。请直接输出改写后的文本，不要包含任何解释：\n\n${text}`;
+  } else {
+    prompt = `请对以下文本进行${style}风格的润色优化。请直接输出优化后的文本，不要包含任何解释：\n\n${text}`;
+  }
+
+  // 智能网络路由：尝试多个端点和模型
+  const endpoints = [
+    {
+      url: 'https://api.openai.com/v1/chat/completions',
+      models: ['gpt-4o', 'gpt-3.5-turbo'],
+      name: 'OpenAI Official'
+    },
+    {
+      url: 'https://api.openai-proxy.com/v1/chat/completions',
+      models: ['gpt-4o', 'gpt-3.5-turbo'],
+      name: 'OpenAI Proxy 1'
+    }
+  ];
+  
+  let lastError;
+  
+  for (const endpoint of endpoints) {
+    for (const model of endpoint.models) {
+      try {
+        console.log(`润色尝试 ${endpoint.name} - ${model}`);
+        
+        const response = await fetch(endpoint.url, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${apiKey}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            model: model,
+            messages: [{
+              role: 'user',
+              content: prompt
+            }],
+            max_tokens: 2048,
+            temperature: 0.7
+          }),
+          signal: AbortSignal.timeout(endpoint.timeout)
+        });
+
+        if (!response.ok) {
+          const errorData = await response.text();
+          console.log(`润色 ${endpoint.name} - ${model} 失败: ${response.status} ${response.statusText}`);
+          throw new Error(`OpenAI API错误: ${response.status} ${response.statusText} - ${errorData}`);
+        }
+
+        const data = await response.json();
+        const polishedText = data.choices[0]?.message?.content?.trim();
+        
+        if (!polishedText) {
+          throw new Error('OpenAI返回空结果');
+        }
+
+        console.log(`润色 ${endpoint.name} - ${model} 成功`);
+        return {
+          originalText: text,
+          translatedText: polishedText,
+          service: 'ChatGPT',
+          style: style,
+          error: false
+        };
+      } catch (error) {
+        lastError = error;
+        console.log(`润色 ${endpoint.name} - ${model} 失败:`, error.message);
+        continue;
+      }
+    }
+  }
+  
+  // 如果所有端点都失败，抛出最后一个错误
+  throw lastError;
+}
+
+// DeepSeek润色实现
+async function callDeepSeekPolish(text, style, env) {
+  const apiKey = env.DEEPSEEK_API_KEY;
+  if (!apiKey) {
+    throw new Error('请配置 DEEPSEEK_API_KEY 环境变量');
+  }
+
+  let prompt;
+  if (style === 'normal') {
+    prompt = `请对以下文本进行常规优化，保持原意的同时提升表达质量和流畅度。请直接输出优化后的文本，不要包含任何解释：\n\n${text}`;
+  } else if (style === 'rephrase') {
+    prompt = `请重新组织以下文本的表达方式，保持核心内容不变但使用不同的语言结构和词汇。请直接输出改写后的文本，不要包含任何解释：\n\n${text}`;
+  } else {
+    prompt = `请对以下文本进行${style}风格的润色优化。请直接输出优化后的文本，不要包含任何解释：\n\n${text}`;
+  }
+
+  const response = await fetch('https://api.siliconflow.cn/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${apiKey}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      model: 'deepseek-ai/DeepSeek-V3',
+      messages: [{
+        role: 'user',
+        content: prompt
+      }],
+      max_tokens: 2048,
+      temperature: 0.7
+    })
+  });
+
+  if (!response.ok) {
+    throw new Error(`DeepSeek API错误: ${response.status} ${response.statusText}`);
+  }
+
+  const data = await response.json();
+  const polishedText = data.choices[0]?.message?.content?.trim();
+  
+  if (!polishedText) {
+    throw new Error('DeepSeek返回空结果');
+  }
+
+  return {
+    originalText: text,
+    translatedText: polishedText,
+    service: 'DeepSeek',
+    style: style,
+    error: false
+  };
+}
+
+// Gemini润色实现
+async function callGeminiPolish(text, style, env) {
+  const apiKey = env.GEMINI_API_KEY;
+  if (!apiKey) {
+    throw new Error('请配置 GEMINI_API_KEY 环境变量');
+  }
+
+  let prompt;
+  if (style === 'normal') {
+    prompt = `请对以下文本进行常规优化，保持原意的同时提升表达质量和流畅度。请直接输出优化后的文本，不要包含任何解释：\n\n${text}`;
+  } else if (style === 'rephrase') {
+    prompt = `请重新组织以下文本的表达方式，保持核心内容不变但使用不同的语言结构和词汇。请直接输出改写后的文本，不要包含任何解释：\n\n${text}`;
+  } else {
+    prompt = `请对以下文本进行${style}风格的润色优化。请直接输出优化后的文本，不要包含任何解释：\n\n${text}`;
+  }
+
+  // 智能网络路由：尝试多个模型和配置
+  const endpoints = [
+    {
+      url: `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
+      model: 'gemini-2.0-flash',
+      name: 'Gemini 2.0 Flash',
+      timeout: 15000,
+      temperature: 0.7
+    },
+    {
+      url: `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`,
+      model: 'gemini-1.5-flash',
+      name: 'Gemini 1.5 Flash',
+      timeout: 18000,
+      temperature: 0.7
+    },
+    {
+      url: `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:generateContent?key=${apiKey}`,
+      model: 'gemini-1.5-pro',
+      name: 'Gemini 1.5 Pro',
+      timeout: 25000,
+      temperature: 0.6
+    },
+    {
+      url: `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.0-pro:generateContent?key=${apiKey}`,
+      model: 'gemini-1.0-pro',
+      name: 'Gemini 1.0 Pro',
+      timeout: 20000,
+      temperature: 0.7
+    }
+  ];
+  
+  let lastError;
+  
+  for (const endpoint of endpoints) {
+    try {
+      console.log(`润色尝试 ${endpoint.name}`);
+      
+      const response = await fetch(endpoint.url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          contents: [{
+            parts: [{
+              text: prompt
+            }]
+          }],
+          generationConfig: {
+            temperature: endpoint.temperature,
+            maxOutputTokens: 2048,
+            topK: 40,
+            topP: 0.95
+          },
+          safetySettings: [
+            {
+              category: "HARM_CATEGORY_HARASSMENT",
+              threshold: "BLOCK_MEDIUM_AND_ABOVE"
+            },
+            {
+              category: "HARM_CATEGORY_HATE_SPEECH",
+              threshold: "BLOCK_MEDIUM_AND_ABOVE"
+            },
+            {
+              category: "HARM_CATEGORY_SEXUALLY_EXPLICIT",
+              threshold: "BLOCK_MEDIUM_AND_ABOVE"
+            },
+            {
+              category: "HARM_CATEGORY_DANGEROUS_CONTENT",
+              threshold: "BLOCK_MEDIUM_AND_ABOVE"
+            }
+          ]
+        }),
+        signal: AbortSignal.timeout(endpoint.timeout)
+      });
+
+      if (!response.ok) {
+        const errorData = await response.text();
+        console.log(`润色 ${endpoint.name} 失败: ${response.status} ${response.statusText}`);
+        
+        // 特殊处理常见错误
+        if (response.status === 429) {
+          console.log(`润色 ${endpoint.name} 请求频率限制，尝试下一个端点`);
+          throw new Error(`Gemini API请求频率超限: ${response.status} ${response.statusText}`);
+        } else if (response.status === 403) {
+          console.log(`润色 ${endpoint.name} API密钥问题，尝试下一个端点`);
+          throw new Error(`Gemini API权限错误: ${response.status} ${response.statusText}`);
+        } else if (response.status === 400) {
+          console.log(`润色 ${endpoint.name} 请求格式或模型不支持，尝试下一个端点`);
+          throw new Error(`Gemini API请求错误: ${response.status} ${response.statusText} - ${errorData}`);
+        }
+        
+        throw new Error(`Gemini API错误: ${response.status} ${response.statusText} - ${errorData}`);
+      }
+
+      const data = await response.json();
+      
+      // 检查响应格式和内容安全性
+      if (!data.candidates || !data.candidates.length) {
+        if (data.promptFeedback && data.promptFeedback.blockReason) {
+          console.log(`润色 ${endpoint.name} 内容被安全过滤器拒绝: ${data.promptFeedback.blockReason}`);
+          throw new Error(`Gemini内容被安全过滤器拒绝: ${data.promptFeedback.blockReason}`);
+        }
+        throw new Error('Gemini返回异常响应: 没有候选结果');
+      }
+      
+      const candidate = data.candidates[0];
+      if (!candidate.content || !candidate.content.parts || !candidate.content.parts.length) {
+        throw new Error('Gemini返回异常响应: 候选结果格式错误');
+      }
+      
+      // 检查是否因安全原因被阻止
+      if (candidate.finishReason === 'SAFETY') {
+        console.log(`润色 ${endpoint.name} 响应因安全原因被阻止`);
+        throw new Error('Gemini响应因安全原因被阻止');
+      }
+      
+      const polishedText = candidate.content.parts[0].text.trim();
+      
+      if (!polishedText) {
+        throw new Error('Gemini返回空结果');
+      }
+
+      console.log(`润色 ${endpoint.name} 成功`);
+      return {
+        originalText: text,
+        translatedText: polishedText,
+        service: 'Gemini',
+        style: style,
+        error: false
+      };
+    } catch (error) {
+      lastError = error;
+      console.log(`润色 ${endpoint.name} 失败:`, error.message);
+      
+      // 如果是致命错误（如API密钥问题），不再尝试其他端点
+      if (error.message.includes('403') && error.message.includes('API权限错误')) {
+        console.log('检测到API密钥权限问题，停止尝试其他端点');
+        break;
+      }
+      
+      continue;
+    }
+  }
+  
+  // 如果所有端点都失败，抛出最后一个错误
+  throw lastError;
+}
+
+// Qwen润色实现
+async function callQwenPolish(text, style, env) {
+  const apiKey = env.QWEN_API_KEY;
+  if (!apiKey) {
+    throw new Error('请配置 QWEN_API_KEY 环境变量');
+  }
+
+  let prompt;
+  if (style === 'normal') {
+    prompt = `请对以下文本进行常规优化，保持原意的同时提升表达质量和流畅度。请直接输出优化后的文本，不要包含任何解释：\n\n${text}`;
+  } else if (style === 'rephrase') {
+    prompt = `请重新组织以下文本的表达方式，保持核心内容不变但使用不同的语言结构和词汇。请直接输出改写后的文本，不要包含任何解释：\n\n${text}`;
+  } else {
+    prompt = `请对以下文本进行${style}风格的润色优化。请直接输出优化后的文本，不要包含任何解释：\n\n${text}`;
+  }
+
+  const response = await fetch('https://api.siliconflow.cn/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${apiKey}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      model: 'Qwen/Qwen2.5-72B-Instruct',
+      messages: [{
+        role: 'user',
+        content: prompt
+      }],
+      max_tokens: 2048,
+      temperature: 0.7
+    })
+  });
+
+  if (!response.ok) {
+    throw new Error(`Qwen API错误: ${response.status} ${response.statusText}`);
+  }
+
+  const data = await response.json();
+  const polishedText = data.choices[0]?.message?.content?.trim();
+  
+  if (!polishedText) {
+    throw new Error('Qwen返回空结果');
+  }
+
+  return {
+    originalText: text,
+    translatedText: polishedText,
+    service: 'Qwen',
+    style: style,
+    error: false
+  };
+}
+
+// 豆包润色实现
+async function callDoubaoPolish(text, style, env) {
+  const apiKey = env.DOUBAO_API_KEY;
+  if (!apiKey) {
+    throw new Error('请配置 DOUBAO_API_KEY 环境变量');
+  }
+
+  let prompt;
+  if (style === 'normal') {
+    prompt = `请对以下文本进行常规优化，保持原意的同时提升表达质量和流畅度。请直接输出优化后的文本，不要包含任何解释：\n\n${text}`;
+  } else if (style === 'rephrase') {
+    prompt = `请重新组织以下文本的表达方式，保持核心内容不变但使用不同的语言结构和词汇。请直接输出改写后的文本，不要包含任何解释：\n\n${text}`;
+  } else {
+    prompt = `请对以下文本进行${style}风格的润色优化。请直接输出优化后的文本，不要包含任何解释：\n\n${text}`;
+  }
+
+  const response = await fetch('https://ark.cn-beijing.volces.com/api/v3/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${apiKey}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      model: 'doubao-1-5-pro-32k-250115',
+      messages: [{
+        role: 'user',
+        content: prompt
+      }],
+      max_tokens: 2048,
+      temperature: 0.7
+    })
+  });
+
+  if (!response.ok) {
+    throw new Error(`豆包 API错误: ${response.status} ${response.statusText}`);
+  }
+
+  const data = await response.json();
+  const polishedText = data.choices[0]?.message?.content?.trim();
+  
+  if (!polishedText) {
+    throw new Error('豆包返回空结果');
+  }
   
   return {
-    success: true,
-    polishedText: `[${service}润色示例 - ${style}风格] ${text}`,
-    message: 'Cloudflare部署时需完整实现此函数'
+    originalText: text,
+    translatedText: polishedText,
+    service: '豆包',
+    style: style,
+    error: false
   };
 } 
