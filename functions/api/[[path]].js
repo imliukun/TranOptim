@@ -1,33 +1,4 @@
 // TranOptim API for Cloudflare Pages Functions
-// 支持自定义代理端点的配置
-
-// 获取用户自定义的代理端点或使用默认端点
-function getOpenAIEndpoints(env) {
-  const customEndpoints = env.CUSTOM_OPENAI_ENDPOINTS;
-  if (customEndpoints) {
-    return customEndpoints.split(',').map(url => url.trim());
-  }
-  
-  return [
-    'https://api.openai.com/v1/chat/completions',
-    'https://openai.1rmb.tk/v1/chat/completions',
-    'https://api.chatanywhere.tech/v1/chat/completions',
-    'https://api.chatanywhere.cn/v1/chat/completions'
-  ];
-}
-
-function getGeminiEndpoints(env, apiKey) {
-  const customEndpoints = env.CUSTOM_GEMINI_ENDPOINTS;
-  if (customEndpoints) {
-    return customEndpoints.split(',').map(url => url.trim() + `?key=${apiKey}`);
-  }
-  
-  return [
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`,
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:generateContent?key=${apiKey}`
-  ];
-}
 
 // 认证配置
 const AuthConfig = {
@@ -426,68 +397,59 @@ async function callOpenAITranslation(text, sourceLang, targetLang, env) {
   const fromLangName = getLanguageName(sourceLang);
   const toLangName = getLanguageName(targetLang);
   
-  const prompt = sourceLang === 'auto' 
-    ? `请将以下文本翻译成${toLangName}，请直接输出翻译结果，不要包含任何解释或额外内容：\n\n${text}`
-    : `请将以下${fromLangName}文本翻译成${toLangName}，请直接输出翻译结果，不要包含任何解释或额外内容：\n\n${text}`;
+  console.log(`使用ChatGPT翻译: ${sourceLang} -> ${targetLang}`);
+  console.log(`翻译语言: ${fromLangName} -> ${toLangName}`);
 
-  // 配置多个API端点，包括代理端点
-  const apiEndpoints = getOpenAIEndpoints(env);
-  
-  // 尝试使用gpt-4o，如果失败则降级到gpt-3.5-turbo
-  const models = ['gpt-4o', 'gpt-3.5-turbo'];
-  let lastError;
-  
-  for (const model of models) {
-    for (const endpoint of apiEndpoints) {
-      try {
-        console.log(`尝试OpenAI端点: ${endpoint}, 模型: ${model}`);
-        
-        const response = await fetch(endpoint, {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${apiKey}`,
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            model: model,
-            messages: [{
-              role: 'user',
-              content: prompt
-            }],
-            max_tokens: 2048,
-            temperature: 0.3
-          })
-        });
-
-        if (!response.ok) {
-          const errorData = await response.text();
-          throw new Error(`OpenAI API错误: ${response.status} ${response.statusText} - ${errorData}`);
+  const response = await fetch('https://api.openai.com/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+      'OpenAI-Beta': 'assistants=v2'
+    },
+    body: JSON.stringify({
+      model: 'gpt-4o',
+      messages: [
+        {
+          role: 'system',
+          content: `你是一个专业的翻译助手，请将以下${fromLangName}文本翻译成${toLangName}，保持原文的意思、风格和格式。只返回翻译结果，不要添加任何解释或注释。`
+        },
+        {
+          role: 'user',
+          content: text
         }
+      ],
+      temperature: 0.3,
+      max_tokens: 2048,
+      top_p: 1.0,
+      frequency_penalty: 0,
+      presence_penalty: 0
+    })
+  });
 
-        const data = await response.json();
-        const translatedText = data.choices[0]?.message?.content?.trim();
-        
-        if (!translatedText) {
-          throw new Error('OpenAI返回空结果');
-        }
-
-        console.log(`OpenAI成功 - 端点: ${endpoint}, 模型: ${model}`);
-        return {
-          originalText: text,
-          translatedText: translatedText,
-          service: 'ChatGPT',
-          error: false
-        };
-      } catch (error) {
-        lastError = error;
-        console.log(`OpenAI端点 ${endpoint} 模型 ${model} 失败:`, error.message);
-        // 继续尝试下一个端点或模型
-      }
-    }
+  if (!response.ok) {
+    const errorData = await response.text();
+    console.error('OpenAI API错误:', response.status, errorData);
+    throw new Error(`OpenAI API调用失败: ${response.status} ${response.statusText}`);
   }
+
+  const data = await response.json();
   
-  // 如果所有端点都失败了，抛出最后一个错误
-  throw lastError;
+  if (!data.choices || !data.choices.length) {
+    throw new Error('OpenAI返回异常响应');
+  }
+
+  const translatedText = data.choices[0].message.content;
+  console.log('OpenAI翻译成功, 结果长度:', translatedText.length);
+
+  return {
+    originalText: text,
+    translatedText: translatedText,
+    service: 'ChatGPT',
+    fromLang: sourceLang,
+    toLang: targetLang,
+    error: false
+  };
 }
 
 // DeepSeek翻译实现
@@ -618,93 +580,84 @@ async function callGeminiTranslation(text, sourceLang, targetLang, env) {
   const fromLangName = getLanguageName(sourceLang);
   const toLangName = getLanguageName(targetLang);
   
-  const prompt = sourceLang === 'auto' 
-    ? `请将以下文本翻译成${toLangName}，请直接输出翻译结果，不要包含任何解释或额外内容：\n\n${text}`
-    : `请将以下${fromLangName}文本翻译成${toLangName}，请直接输出翻译结果，不要包含任何解释或额外内容：\n\n${text}`;
+  console.log(`使用Gemini翻译: ${sourceLang} -> ${targetLang}`);
+  console.log(`翻译语言: ${fromLangName} -> ${toLangName}`);
 
-  // 配置多个Gemini API端点
-  const geminiEndpoints = getGeminiEndpoints(env, apiKey);
-
-  let lastError;
+  // 调用Google Gemini API - 确保API密钥正确编码
+  const encodedApiKey = encodeURIComponent(apiKey.trim());
+  const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${encodedApiKey}`;
   
-  for (const endpoint of geminiEndpoints) {
-    try {
-      console.log(`尝试Gemini端点: ${endpoint.split('?')[0]}`);
-      
-      const response = await fetch(endpoint, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          contents: [{
-            parts: [{
-              text: prompt
-            }]
-          }],
-          generationConfig: {
-            temperature: 0.2,
-            topK: 40,
-            topP: 0.95,
-            maxOutputTokens: 8192
-          },
-          safetySettings: [
+  console.log(`使用Gemini API URL: ${apiUrl.replace(encodedApiKey, 'API_KEY_HIDDEN')}`);
+
+  const response = await fetch(apiUrl, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      contents: [
+        {
+          role: "user",
+          parts: [
             {
-              category: "HARM_CATEGORY_HARASSMENT",
-              threshold: "BLOCK_MEDIUM_AND_ABOVE"
-            },
-            {
-              category: "HARM_CATEGORY_HATE_SPEECH",
-              threshold: "BLOCK_MEDIUM_AND_ABOVE"
-            },
-            {
-              category: "HARM_CATEGORY_SEXUALLY_EXPLICIT",
-              threshold: "BLOCK_MEDIUM_AND_ABOVE"
-            },
-            {
-              category: "HARM_CATEGORY_DANGEROUS_CONTENT",
-              threshold: "BLOCK_MEDIUM_AND_ABOVE"
+              text: sourceLang === 'auto' 
+                ? `请将以下文本翻译成${toLangName}，保持原文的意思、风格和格式。只返回翻译结果，不要添加任何解释或注释。\n\n${text}`
+                : `请将以下${fromLangName}文本翻译成${toLangName}，保持原文的意思、风格和格式。只返回翻译结果，不要添加任何解释或注释。\n\n${text}`
             }
           ]
-        })
-      });
-
-      if (!response.ok) {
-        const errorData = await response.text();
-        throw new Error(`Gemini API错误: ${response.status} ${response.statusText} - ${errorData}`);
-      }
-
-      const data = await response.json();
-      
-      if (!data.candidates || !data.candidates.length) {
-        if (data.promptFeedback && data.promptFeedback.blockReason) {
-          throw new Error(`Gemini提示被拒绝: ${data.promptFeedback.blockReason}`);
         }
-        throw new Error('Gemini返回异常响应');
-      }
-      
-      const translatedText = data.candidates[0].content.parts[0].text.trim();
-      
-      if (!translatedText) {
-        throw new Error('Gemini返回空结果');
-      }
+      ],
+      generationConfig: {
+        temperature: 0.2,
+        topK: 40,
+        topP: 0.95,
+        maxOutputTokens: 8192
+      },
+      safetySettings: [
+        {
+          category: "HARM_CATEGORY_HARASSMENT",
+          threshold: "BLOCK_MEDIUM_AND_ABOVE"
+        },
+        {
+          category: "HARM_CATEGORY_HATE_SPEECH",
+          threshold: "BLOCK_MEDIUM_AND_ABOVE"
+        },
+        {
+          category: "HARM_CATEGORY_SEXUALLY_EXPLICIT",
+          threshold: "BLOCK_MEDIUM_AND_ABOVE"
+        },
+        {
+          category: "HARM_CATEGORY_DANGEROUS_CONTENT",
+          threshold: "BLOCK_MEDIUM_AND_ABOVE"
+        }
+      ]
+    })
+  });
 
-      console.log(`Gemini成功 - 端点: ${endpoint.split('?')[0]}`);
-      return {
-        originalText: text,
-        translatedText: translatedText,
-        service: 'Gemini',
-        error: false
-      };
-    } catch (error) {
-      lastError = error;
-      console.log(`Gemini端点失败:`, error.message);
-      // 继续尝试下一个端点
-    }
+  if (!response.ok) {
+    const errorData = await response.text();
+    console.error('Gemini API错误:', response.status, errorData);
+    throw new Error(`Gemini API调用失败: ${response.status} ${response.statusText}`);
   }
-  
-  // 如果所有端点都失败了，抛出最后一个错误
-  throw lastError;
+
+  const data = await response.json();
+  console.log('Gemini API响应状态:', response.status);
+
+  if (!data.candidates || !data.candidates.length || !data.candidates[0].content) {
+    throw new Error('Gemini返回异常响应');
+  }
+
+  const translatedText = data.candidates[0].content.parts[0].text;
+  console.log('Gemini翻译成功, 结果长度:', translatedText.length);
+
+  return {
+    originalText: text,
+    translatedText: translatedText,
+    service: 'Gemini',
+    fromLang: sourceLang,
+    toLang: targetLang,
+    error: false
+  };
 }
 
 // 豆包翻译实现
@@ -820,74 +773,62 @@ async function callOpenAIPolish(text, style, env) {
     throw new Error('请配置 OPENAI_API_KEY 环境变量');
   }
 
-  let prompt;
+  let stylePrompt;
   if (style === 'normal') {
-    prompt = `请对以下文本进行常规优化，保持原意的同时提升表达质量和流畅度。请直接输出优化后的文本，不要包含任何解释：\n\n${text}`;
+    stylePrompt = '常规优化，保持原意的同时提升表达质量和流畅度';
   } else if (style === 'rephrase') {
-    prompt = `请重新组织以下文本的表达方式，保持核心内容不变但使用不同的语言结构和词汇。请直接输出改写后的文本，不要包含任何解释：\n\n${text}`;
+    stylePrompt = '重新组织表达方式，保持核心内容不变但使用不同的语言结构和词汇';
   } else {
-    prompt = `请对以下文本进行${style}风格的润色优化。请直接输出优化后的文本，不要包含任何解释：\n\n${text}`;
+    stylePrompt = style + '风格';
   }
 
-  // 配置多个API端点
-  const apiEndpoints = getOpenAIEndpoints(env);
+  console.log(`使用ChatGPT进行文本润色，风格: ${style}`);
 
-  // 尝试使用gpt-4o，如果失败则降级到gpt-3.5-turbo
-  const models = ['gpt-4o', 'gpt-3.5-turbo'];
-  let lastError;
-  
-  for (const model of models) {
-    for (const endpoint of apiEndpoints) {
-      try {
-        console.log(`尝试OpenAI润色端点: ${endpoint}, 模型: ${model}`);
-        
-        const response = await fetch(endpoint, {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${apiKey}`,
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            model: model,
-            messages: [{
-              role: 'user',
-              content: prompt
-            }],
-            max_tokens: 2048,
-            temperature: 0.7
-          })
-        });
-
-        if (!response.ok) {
-          const errorData = await response.text();
-          throw new Error(`OpenAI API错误: ${response.status} ${response.statusText} - ${errorData}`);
+  const response = await fetch('https://api.openai.com/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${apiKey}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      model: 'gpt-4o',
+      messages: [
+        {
+          role: 'system',
+          content: `你是一位专业文本润色助手。请将以下文本润色为${stylePrompt}。不要额外添加原文中没有的内容，只专注于改善表达方式。只返回润色后的文本，不要添加任何解释或注释。`
+        },
+        {
+          role: 'user',
+          content: text
         }
+      ],
+      temperature: 0.7,
+      max_tokens: 2048
+    })
+  });
 
-        const data = await response.json();
-        const polishedText = data.choices[0]?.message?.content?.trim();
-        
-        if (!polishedText) {
-          throw new Error('OpenAI返回空结果');
-        }
-
-        console.log(`OpenAI润色成功 - 端点: ${endpoint}, 模型: ${model}`);
-        return {
-          originalText: text,
-          translatedText: polishedText,
-          service: 'ChatGPT',
-          style: style,
-          error: false
-        };
-      } catch (error) {
-        lastError = error;
-        console.log(`OpenAI润色端点 ${endpoint} 模型 ${model} 失败:`, error.message);
-        // 继续尝试下一个端点或模型
-      }
-    }
+  if (!response.ok) {
+    const errorData = await response.text();
+    console.error('OpenAI润色API错误:', response.status, errorData);
+    throw new Error(`OpenAI润色API调用失败: ${response.status} ${response.statusText}`);
   }
-  
-  // 如果所有端点都失败了，抛出最后一个错误
-  throw lastError;
+
+  const data = await response.json();
+
+  if (!data.choices || !data.choices.length) {
+    throw new Error('OpenAI返回异常响应');
+  }
+
+  const polishedText = data.choices[0].message.content;
+  console.log('OpenAI润色成功, 结果长度:', polishedText.length);
+
+  return {
+    originalText: text,
+    polishedText: polishedText,
+    service: 'ChatGPT',
+    style: style,
+    error: false
+  };
 }
 
 // DeepSeek润色实现
@@ -950,76 +891,67 @@ async function callGeminiPolish(text, style, env) {
     throw new Error('请配置 GEMINI_API_KEY 环境变量');
   }
 
-  let prompt;
+  let stylePrompt;
   if (style === 'normal') {
-    prompt = `请对以下文本进行常规优化，保持原意的同时提升表达质量和流畅度。请直接输出优化后的文本，不要包含任何解释：\n\n${text}`;
+    stylePrompt = '常规优化，保持原意的同时提升表达质量和流畅度';
   } else if (style === 'rephrase') {
-    prompt = `请重新组织以下文本的表达方式，保持核心内容不变但使用不同的语言结构和词汇。请直接输出改写后的文本，不要包含任何解释：\n\n${text}`;
+    stylePrompt = '重新组织表达方式，保持核心内容不变但使用不同的语言结构和词汇';
   } else {
-    prompt = `请对以下文本进行${style}风格的润色优化。请直接输出优化后的文本，不要包含任何解释：\n\n${text}`;
+    stylePrompt = style + '风格';
   }
 
-  // 配置多个Gemini API端点
-  const geminiEndpoints = getGeminiEndpoints(env, apiKey);
+  console.log(`使用Gemini进行文本润色，风格: ${style}`);
 
-  let lastError;
-  
-  for (const endpoint of geminiEndpoints) {
-    try {
-      console.log(`尝试Gemini润色端点: ${endpoint.split('?')[0]}`);
-      
-      const response = await fetch(endpoint, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          contents: [{
-            parts: [{
-              text: prompt
-            }]
-          }],
-          generationConfig: {
-            temperature: 0.7,
-            maxOutputTokens: 2048
-          }
-        })
-      });
+  // 调用Google Gemini API
+  const encodedApiKey = encodeURIComponent(apiKey.trim());
+  const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${encodedApiKey}`;
 
-      if (!response.ok) {
-        const errorData = await response.text();
-        throw new Error(`Gemini API错误: ${response.status} ${response.statusText} - ${errorData}`);
+  const response = await fetch(apiUrl, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      contents: [
+        {
+          role: "user",
+          parts: [
+            {
+              text: `请作为文本润色助手，将以下文本润色为${stylePrompt}。不要额外添加原文中没有的内容，只专注于改善表达方式。只返回润色后的文本，不要添加任何解释或注释。\n\n${text}`
+            }
+          ]
+        }
+      ],
+      generationConfig: {
+        temperature: 0.7,
+        maxOutputTokens: 2048
       }
+    })
+  });
 
-      const data = await response.json();
-      
-      if (!data.candidates || !data.candidates.length) {
-        throw new Error('Gemini返回异常响应');
-      }
-      
-      const polishedText = data.candidates[0].content.parts[0].text.trim();
-      
-      if (!polishedText) {
-        throw new Error('Gemini返回空结果');
-      }
-
-      console.log(`Gemini润色成功 - 端点: ${endpoint.split('?')[0]}`);
-      return {
-        originalText: text,
-        translatedText: polishedText,
-        service: 'Gemini',
-        style: style,
-        error: false
-      };
-    } catch (error) {
-      lastError = error;
-      console.log(`Gemini润色端点失败:`, error.message);
-      // 继续尝试下一个端点
-    }
+  if (!response.ok) {
+    const errorData = await response.text();
+    console.error('Gemini润色API错误:', response.status, errorData);
+    throw new Error(`Gemini润色API调用失败: ${response.status} ${response.statusText}`);
   }
-  
-  // 如果所有端点都失败了，抛出最后一个错误
-  throw lastError;
+
+  const data = await response.json();
+  console.log('Gemini润色API响应状态:', response.status);
+
+  if (!data.candidates || !data.candidates.length || !data.candidates[0].content) {
+    throw new Error('Gemini返回异常响应');
+  }
+
+  const polishedText = data.candidates[0].content.parts[0].text;
+  console.log('Gemini润色成功, 结果长度:', polishedText.length);
+
+  return {
+    originalText: text,
+    polishedText: polishedText,
+    service: 'Gemini',
+    style: style,
+    error: false
+  };
 }
 
 // Qwen润色实现
